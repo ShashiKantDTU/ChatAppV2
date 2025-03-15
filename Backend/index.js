@@ -12,6 +12,8 @@ const { send } = require('process');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const app = express();
 const server = http.createServer(app);
@@ -42,21 +44,24 @@ app.use((req, res, next) => {
 // Middleware for routes
 app.use(router);
 
-// Create uploads directory if it doesn't exist
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'your-cloud-name', // Replace placeholder in production
+  api_key: process.env.CLOUDINARY_API_KEY || 'your-api-key', // Replace placeholder in production
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'your-api-secret' // Replace placeholder in production
+});
 
-// Configure multer for file upload
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
+// Set up Cloudinary storage
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'chatapp_uploads',
+    resource_type: 'auto', // auto-detect file type
+    // Optional transformation for images
+    transformation: [
+      { quality: 'auto:good' } // Automatically optimize quality
+    ]
+  }
 });
 
 const upload = multer({
@@ -97,9 +102,6 @@ const upload = multer({
     }
 });
 
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // File upload endpoint
 app.post('/upload', upload.array('file', 10), (req, res) => {
     try {
@@ -107,13 +109,15 @@ app.post('/upload', upload.array('file', 10), (req, res) => {
             throw new Error('No files uploaded');
         }
 
-        // Handle multiple files
+        // Cloudinary provides full URLs in the result
         const files = req.files.map(file => ({
-            url: `http://localhost:3000/uploads/${file.filename}`,
+            url: file.path, // Cloudinary URL
             filename: file.originalname,
             size: file.size,
             mimeType: file.mimetype
         }));
+
+        console.log('Uploaded files to Cloudinary:', files);
 
         res.json({
             success: true,
