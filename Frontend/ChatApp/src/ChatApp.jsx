@@ -56,12 +56,15 @@ function ChatApp() {
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
             const newSocket = io(API_URL, {
                 reconnection: true,
-                reconnectionAttempts: 5,
+                reconnectionAttempts: 10,
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
                 timeout: 20000,
                 autoConnect: true,
-                transports: ['websocket', 'polling']
+                transports: ['websocket', 'polling'],
+                upgrade: true,
+                forceNew: true,
+                secure: API_URL.startsWith('https')
             });
             setSocket(newSocket);
             

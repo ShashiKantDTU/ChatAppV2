@@ -89,8 +89,24 @@ const VoiceCall = ({
     const configuration = {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-        ]
+            { urls: 'stun:stun1.l.google.com:19302' },
+            {
+                urls: 'turn:openrelay.metered.ca:80',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            },
+            {
+                urls: 'turn:openrelay.metered.ca:443',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            },
+            {
+                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            }
+        ],
+        iceCandidatePoolSize: 10
     };
 
     useEffect(() => {
@@ -155,6 +171,28 @@ const VoiceCall = ({
                     startTimer();
                 } else if (state === 'failed' || state === 'disconnected') {
                     console.log('Call connection failed');
+                    setError('Connection failed');
+                    cleanup();
+                }
+            };
+
+            // Add logging for signaling state changes
+            peerConnection.onsignalingstatechange = () => {
+                console.log('Signaling state changed:', peerConnection.signalingState);
+            };
+
+            // Add detailed ICE gathering state logging
+            peerConnection.onicegatheringstatechange = () => {
+                console.log('ICE gathering state:', peerConnection.iceGatheringState);
+            };
+
+            // Add connection state change logging
+            peerConnection.onconnectionstatechange = () => {
+                console.log('Connection state:', peerConnection.connectionState);
+                if (peerConnection.connectionState === 'connected') {
+                    console.log('WebRTC connection established successfully');
+                } else if (peerConnection.connectionState === 'failed') {
+                    console.log('WebRTC connection failed');
                     setError('Connection failed');
                     cleanup();
                 }
@@ -412,69 +450,65 @@ const VoiceCall = ({
 
     return (
         <div className={styles.voiceCallContainer}>
-            <div className={styles.callContent}>
-                <img 
-                    src={remoteUser?.profilepicture} 
-                    alt={remoteUser?.name} 
-                    className={styles.callerImage} 
-                />
-                <h2 className={styles.callerName}>{remoteUser?.name}</h2>
-                <p className={styles.callStatus}>
-                    {error ? `Error: ${error}` :
-                     callStatus === 'connecting' ? 'Connecting...' : 
-                     callStatus === 'ongoing' ? formatDuration(callDuration) : 
-                     callStatus === 'incoming' ? 'Incoming call...' :
-                     'Call ended'}
-                </p>
-
-                <div className={styles.controls}>
+            <div className={styles.voiceCallCard}>
+                <div className={styles.callHeader}>
+                    <h3>{remoteUser?.username || 'User'}</h3>
+                    <p className={styles.callStatus}>
+                        {callStatus === 'connecting' && 'Connecting...'}
+                        {callStatus === 'ongoing' && formatDuration(callDuration)}
+                        {callStatus === 'incoming' && 'Incoming call...'}
+                        {callStatus === 'ended' && 'Call ended'}
+                    </p>
+                    {error && <p className={styles.errorMessage}>{error}</p>}
+                </div>
+                
+                <div className={styles.userAvatar}>
+                    {remoteUser?.profilepicture ? (
+                        <img src={remoteUser.profilepicture} alt={remoteUser.username} />
+                    ) : (
+                        <div className={styles.defaultAvatar}>{remoteUser?.username?.[0] || 'U'}</div>
+                    )}
+                </div>
+                
+                <div className={styles.callActions}>
                     {callStatus === 'incoming' ? (
-                        // Show Accept/Decline buttons for incoming calls
                         <>
                             <button 
-                                className={`${styles.controlButton} ${styles.acceptCall}`}
-                                onClick={() => {
-                                    console.log('Accept button clicked, stored offer:', storedOffer);
-                                    if (!storedOffer) {
-                                        console.error('No stored offer available');
-                                        setError('Failed to accept call: No offer available');
-                                        return;
-                                    }
-                                    handleIncomingCall(storedOffer);
-                                }}
+                                className={`${styles.callButton} ${styles.acceptButton}`} 
+                                onClick={() => handleIncomingCall(storedOffer)}
                             >
-                                <PhoneCallIcon size={24} />
+                                <PhoneCallIcon />
                             </button>
                             <button 
-                                className={`${styles.controlButton} ${styles.endCall}`}
+                                className={`${styles.callButton} ${styles.declineButton}`} 
                                 onClick={endCall}
                             >
-                                <PhoneOff size={24} />
+                                <PhoneOff />
                             </button>
                         </>
                     ) : (
-                        // Show Mute/End buttons for ongoing calls
                         <>
                             <button 
-                                className={`${styles.controlButton} ${isMuted ? styles.muted : ''}`}
+                                className={`${styles.callButton} ${isMuted ? styles.active : ''}`} 
                                 onClick={toggleMute}
-                                disabled={callStatus === 'ended'}
+                                disabled={callStatus !== 'ongoing'}
                             >
-                                {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+                                {isMuted ? <MicOff /> : <Mic />}
                             </button>
                             <button 
-                                className={`${styles.controlButton} ${styles.endCall}`}
+                                className={`${styles.callButton} ${styles.endButton}`} 
                                 onClick={endCall}
                             >
-                                <PhoneOff size={24} />
+                                <PhoneOff />
                             </button>
                         </>
                     )}
                 </div>
             </div>
             
-            {/* Hidden audio element for remote stream */}
-            <audio id="remoteAudio" autoPlay />
+            {/* Audio elements */}
+            <audio id="remoteAudio" autoPlay playsInline></audio>
+            <audio id="localAudio" muted autoPlay playsInline></audio>
         </div>
     );
 };
