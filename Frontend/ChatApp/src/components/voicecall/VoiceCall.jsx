@@ -165,6 +165,20 @@ const VoiceCall = ({
                 const remoteAudio = document.getElementById('remoteAudio');
                 if (remoteAudio) {
                     remoteAudio.srcObject = event.streams[0];
+                    
+                    // Try to play the audio immediately
+                    const playPromise = remoteAudio.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(error => {
+                            console.warn('Initial audio play failed, will retry when connected:', error);
+                        });
+                    }
+                }
+                
+                // Also make sure local audio is set properly
+                const localAudio = document.getElementById('localAudio');
+                if (localAudio && localStreamRef.current) {
+                    localAudio.srcObject = localStreamRef.current;
                 }
             };
 
@@ -177,6 +191,9 @@ const VoiceCall = ({
                     console.log('Call connected successfully');
                     setCallStatus('ongoing');
                     startTimer();
+                    
+                    // Try to ensure audio is playing when connection is established
+                    setTimeout(ensureAudioPlayback, 500);
                 } else if (state === 'failed') {
                     console.error('ICE connection failed - likely a STUN/TURN server issue. Attempting to restart ICE...');
                     try {
@@ -485,6 +502,44 @@ const VoiceCall = ({
         console.log('incomingOffer updated:', storedOffer);
     }, [storedOffer]);
 
+    // Add this function after the ICE connection state handler
+    const ensureAudioPlayback = () => {
+        console.log('Ensuring audio playback...');
+        const remoteAudio = document.getElementById('remoteAudio');
+        const localAudio = document.getElementById('localAudio');
+        
+        if (remoteAudio && remoteAudio.srcObject) {
+            console.log('Remote audio source exists, attempting to play');
+            // Try playing the audio 
+            const playPromise = remoteAudio.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log('Remote audio playing successfully');
+                }).catch(error => {
+                    console.error('Error playing remote audio:', error);
+                    
+                    // If autoplay is blocked by browser policy, show a message
+                    if (error.name === 'NotAllowedError') {
+                        console.log('Autoplay blocked - user interaction required');
+                        setError('Audio blocked. Please click inside the call window.');
+                    }
+                });
+            }
+        } else {
+            console.warn('Remote audio element or source not ready');
+        }
+        
+        if (localAudio && localAudio.srcObject) {
+            // Ensure local audio is also playing (will be muted)
+            const playPromise = localAudio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.error('Error playing local audio:', error);
+                });
+            }
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -543,6 +598,14 @@ const VoiceCall = ({
                         </>
                     )}
                 </div>
+                {error && error.includes('Audio blocked') && (
+                    <button 
+                        className={styles.audioStartButton}
+                        onClick={ensureAudioPlayback}
+                    >
+                        Click to Enable Audio
+                    </button>
+                )}
             </div>
             
             {/* Audio elements */}
