@@ -51,7 +51,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET || 'your-api-secret' // Replace placeholder in production
 });
 
-// Set up Cloudinary storage
+// Set up Cloudinary storage for regular uploads
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
@@ -64,6 +64,26 @@ const storage = new CloudinaryStorage({
   }
 });
 
+// Set up Cloudinary storage for profile images
+const profileImageStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'profile_images',
+    format: 'jpg', // Force jpg format for consistency
+    resource_type: 'image',
+    transformation: [
+      { width: 400, height: 400, crop: 'fill', gravity: 'face' }, // Crop to face when possible
+      { quality: 'auto:good' } // Optimize for web
+    ],
+    // Add a unique identifier to prevent caching issues on update
+    public_id: (req, file) => {
+      const userId = req.query.userId || 'user';
+      return `${userId}_${Date.now()}`;
+    }
+  }
+});
+
+// Regular file upload multer config
 const upload = multer({
     storage: storage,
     limits: {
@@ -102,6 +122,26 @@ const upload = multer({
     }
 });
 
+// Profile image upload multer config
+const profileImageUpload = multer({
+    storage: profileImageStorage,
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB limit for profile pics
+    },
+    fileFilter: function (req, file, cb) {
+        // Only allow image files for profile pictures
+        const allowedTypes = [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp'
+        ];
+        
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type. Only JPG, PNG, GIF and WebP images are allowed for profile pictures.'));
+        }
+    }
+});
+
 // File upload endpoint
 app.post('/upload', upload.array('file', 10), (req, res) => {
     try {
@@ -125,6 +165,31 @@ app.post('/upload', upload.array('file', 10), (req, res) => {
         });
     } catch (error) {
         console.error('Upload error:', error);
+        res.status(400).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Profile image upload endpoint
+app.post('/upload-profile-image', profileImageUpload.single('profileImage'), (req, res) => {
+    try {
+        if (!req.file) {
+            throw new Error('No profile image uploaded');
+        }
+
+        // Cloudinary provides the full URL in the result
+        const profileImageUrl = req.file.path;
+
+        console.log('Uploaded profile image to Cloudinary:', profileImageUrl);
+
+        res.json({
+            success: true,
+            profileImageUrl: profileImageUrl
+        });
+    } catch (error) {
+        console.error('Profile image upload error:', error);
         res.status(400).json({
             success: false,
             error: error.message
