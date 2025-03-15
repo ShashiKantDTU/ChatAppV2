@@ -85,36 +85,28 @@ const VoiceCall = ({
         }
     }, [socket, remoteUser, localUser]);
 
-    // Update the WebRTC configuration with more comprehensive STUN/TURN servers
+    // WebRTC configuration
     const configuration = {
         iceServers: [
-            // Google STUN servers
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
             {
-                urls: [
-                    'stun:stun.l.google.com:19302',
-                    'stun:stun1.l.google.com:19302',
-                    'stun:stun2.l.google.com:19302',
-                    'stun:stun3.l.google.com:19302',
-                    'stun:stun4.l.google.com:19302'
-                ]
+                urls: 'turn:openrelay.metered.ca:80',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
             },
-            // Free TURN servers from OpenRelay
             {
-                urls: [
-                    'turn:openrelay.metered.ca:80',
-                    'turn:openrelay.metered.ca:443',
-                    'turn:openrelay.metered.ca:443?transport=tcp',
-                    'turn:openrelay.metered.ca:80?transport=tcp'
-                ],
+                urls: 'turn:openrelay.metered.ca:443',
+                username: 'openrelayproject',
+                credential: 'openrelayproject'
+            },
+            {
+                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
             }
         ],
-        iceCandidatePoolSize: 10,
-        // Add these options for better NAT traversal
-        iceTransportPolicy: 'all',
-        rtcpMuxPolicy: 'require',
-        bundlePolicy: 'max-bundle'
+        iceCandidatePoolSize: 10
     };
 
     useEffect(() => {
@@ -147,8 +139,8 @@ const VoiceCall = ({
             console.log('Audio permissions granted');
             localStreamRef.current = stream;
 
-            // Create peer connection with enhanced debugging
-            console.log('Creating peer connection with config:', configuration);
+            // Create peer connection
+            console.log('Creating peer connection');
             const peerConnection = new RTCPeerConnection(configuration);
             peerConnectionRef.current = peerConnection;
 
@@ -165,24 +157,10 @@ const VoiceCall = ({
                 const remoteAudio = document.getElementById('remoteAudio');
                 if (remoteAudio) {
                     remoteAudio.srcObject = event.streams[0];
-                    
-                    // Try to play the audio immediately
-                    const playPromise = remoteAudio.play();
-                    if (playPromise !== undefined) {
-                        playPromise.catch(error => {
-                            console.warn('Initial audio play failed, will retry when connected:', error);
-                        });
-                    }
-                }
-                
-                // Also make sure local audio is set properly
-                const localAudio = document.getElementById('localAudio');
-                if (localAudio && localStreamRef.current) {
-                    localAudio.srcObject = localStreamRef.current;
                 }
             };
 
-            // Enhance the ICE connection state change handler
+            // Handle connection state changes
             peerConnection.oniceconnectionstatechange = () => {
                 const state = peerConnection.iceConnectionState;
                 console.log('ICE connection state changed:', state);
@@ -191,30 +169,10 @@ const VoiceCall = ({
                     console.log('Call connected successfully');
                     setCallStatus('ongoing');
                     startTimer();
-                    
-                    // Try to ensure audio is playing when connection is established
-                    setTimeout(ensureAudioPlayback, 500);
-                } else if (state === 'failed') {
-                    console.error('ICE connection failed - likely a STUN/TURN server issue. Attempting to restart ICE...');
-                    try {
-                        peerConnection.restartIce();
-                    } catch (error) {
-                        console.error('Error restarting ICE:', error);
-                        setError('Connection failed');
-                        cleanup();
-                    }
-                } else if (state === 'disconnected') {
-                    console.warn('ICE connection disconnected - attempting to recover...');
-                    // Wait a few seconds to see if it reconnects naturally
-                    setTimeout(() => {
-                        if (peerConnection.iceConnectionState === 'disconnected') {
-                            try {
-                                peerConnection.restartIce();
-                            } catch (error) {
-                                console.error('Error restarting ICE:', error);
-                            }
-                        }
-                    }, 3000);
+                } else if (state === 'failed' || state === 'disconnected') {
+                    console.log('Call connection failed');
+                    setError('Connection failed');
+                    cleanup();
                 }
             };
 
@@ -228,22 +186,15 @@ const VoiceCall = ({
                 console.log('ICE gathering state:', peerConnection.iceGatheringState);
             };
 
-            // Enhance the connection state change handler
+            // Add connection state change logging
             peerConnection.onconnectionstatechange = () => {
                 console.log('Connection state:', peerConnection.connectionState);
                 if (peerConnection.connectionState === 'connected') {
                     console.log('WebRTC connection established successfully');
-                    setCallStatus('ongoing');
-                    startTimer();
                 } else if (peerConnection.connectionState === 'failed') {
-                    console.error('WebRTC connection failed - attempting to restart');
-                    try {
-                        peerConnection.restartIce();
-                    } catch (error) {
-                        console.error('Error restarting connection:', error);
-                        setError('Connection failed');
-                        cleanup();
-                    }
+                    console.log('WebRTC connection failed');
+                    setError('Connection failed');
+                    cleanup();
                 }
             };
 
@@ -270,21 +221,14 @@ const VoiceCall = ({
                 });
             }
 
-            // Enhance the ICE candidate handler
+            // Handle ICE candidates
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate && socket) {
-                    console.log('Generated ICE candidate:', {
-                        type: event.candidate.type,
-                        protocol: event.candidate.protocol,
-                        address: event.candidate.address,
-                        candidateType: event.candidate.candidateType
-                    });
+                    console.log('Generated ICE candidate');
                     socket.emit('ice-candidate', {
                         candidate: event.candidate,
                         to: remoteUser.uid
                     });
-                } else if (!event.candidate) {
-                    console.log('ICE candidate generation complete');
                 }
             };
 
@@ -502,44 +446,6 @@ const VoiceCall = ({
         console.log('incomingOffer updated:', storedOffer);
     }, [storedOffer]);
 
-    // Add this function after the ICE connection state handler
-    const ensureAudioPlayback = () => {
-        console.log('Ensuring audio playback...');
-        const remoteAudio = document.getElementById('remoteAudio');
-        const localAudio = document.getElementById('localAudio');
-        
-        if (remoteAudio && remoteAudio.srcObject) {
-            console.log('Remote audio source exists, attempting to play');
-            // Try playing the audio 
-            const playPromise = remoteAudio.play();
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    console.log('Remote audio playing successfully');
-                }).catch(error => {
-                    console.error('Error playing remote audio:', error);
-                    
-                    // If autoplay is blocked by browser policy, show a message
-                    if (error.name === 'NotAllowedError') {
-                        console.log('Autoplay blocked - user interaction required');
-                        setError('Audio blocked. Please click inside the call window.');
-                    }
-                });
-            }
-        } else {
-            console.warn('Remote audio element or source not ready');
-        }
-        
-        if (localAudio && localAudio.srcObject) {
-            // Ensure local audio is also playing (will be muted)
-            const playPromise = localAudio.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.error('Error playing local audio:', error);
-                });
-            }
-        }
-    };
-
     if (!isOpen) return null;
 
     return (
@@ -598,14 +504,6 @@ const VoiceCall = ({
                         </>
                     )}
                 </div>
-                {error && error.includes('Audio blocked') && (
-                    <button 
-                        className={styles.audioStartButton}
-                        onClick={ensureAudioPlayback}
-                    >
-                        Click to Enable Audio
-                    </button>
-                )}
             </div>
             
             {/* Audio elements */}

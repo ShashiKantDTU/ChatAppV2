@@ -20,107 +20,63 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: `${process.env.NODE_ENV === 'production' ? process.env.BACKEND_URL || 'https://chatappv2-qa96.onrender.com' : 'http://localhost:3000'}/auth/google/callback`
+    callbackURL: "http://localhost:3000/auth/google/callback"
 }, async (accessToken, refreshToken, profile, done) => {
-    try {
-        const user = { 
-            id: profile.id, 
-            email: profile.emails[0].value, 
-            name: profile.displayName,
-            googleId: profile.id // Track Google ID specifically
-        };
-        return done(null, user);
-    } catch (error) {
-        return done(error, null);
-    }
-}));
-
-// Logout before starting Google auth to clear previous sessions
-router.get('/auth/google/logout', (req, res) => {
-    // Clear the token cookie
-    res.clearCookie("token", { 
-        httpOnly: true, 
-        secure: process.env.NODE_ENV === 'production', 
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-    });
     
-    // Redirect to Google auth
-    res.redirect('/auth/google');
-});
+    const user = { id: profile.id, email: profile.emails[0].value, name: profile.displayName };
+    return done(null, user); // ✅ No need to serialize session
+}));
 
 // ✅ Google Login Route
 router.get('/auth/google',
-    passport.authenticate('google', { 
-        scope: ['profile', 'email'],
-        prompt: 'select_account' // Force Google account selection each time
-    })
+    passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
 // ✅ Google OAuth Callback
 router.get('/auth/google/callback', 
-    passport.authenticate('google', { failureRedirect: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login`, session: false }),
+    passport.authenticate('google', { failureRedirect: 'http://localhost:5173/login',session: false }),
     async (req, res) => {
-        try {
-            const user = req.user;
-            const email = user.email;
-            const name = user.name;
-            const googleId = user.googleId || user.id;
+        const user = req.user;
+        const email = user.email;
+        const name = user.name;
 
-            // Check if user already exists
-            let existingUser = await User.findOne({ email: email });
-            
-            // If user doesn't exist, create a new one
-            if (!existingUser) {
-                const uid = nanoid.nanoid(4);
-                let isunique = false;
-                while (!isunique) {
-                    const isexist = await User.findOne({ uid });
-                    if (!isexist) {
-                        isunique = true;
-                    } else {
-                        uid = nanoid.nanoid(4);
-                    }
-                }
-                
-                existingUser = new User({
-                    email: email,
-                    username: name,
-                    uid: uid,
-                    googleId: googleId
+
+        // ✅ Generate JWT token
+        const token = jwt.sign({ email:user.email, name: user.displayName }, process.env.JWT_SECRET);
+
+        // ✅ Store JWT token in HTTP-only cookie
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: false,  // ✅ Change to `true` in production with HTTPS
+            sameSite: 'lax'
+        });
+        res.user = token;
+        // check if user already exists
+        const existingUser = await User.findOne({email: email});
+        if(!existingUser){
+            const uid = nanoid.nanoid(4)
+            let isunique = false;
+            while (!isunique) {
+                const isexist = await User.findOne({ uid
                 });
-                
-                console.log('Creating new user:', existingUser);
-                await existingUser.save();
-            } 
-            // If user exists but doesn't have googleId, update it
-            else if (!existingUser.googleId && googleId) {
-                existingUser.googleId = googleId;
-                await existingUser.save();
+                if (!isexist) {
+                    isunique = true;
+                } else {
+                    uid = nanoid.nanoid(4)
+                }
             }
-
-            // ✅ Generate JWT token with user's correct info
-            const token = jwt.sign({ 
-                email: email, 
-                uid: existingUser.uid, 
-                username: existingUser.username 
-            }, process.env.JWT_SECRET, {
-                expiresIn: '7d' // Set token expiration 
+            const newUser = new User({
+                email: email,
+                username: name,
+                uid: uid
             });
-
-            // ✅ Store JWT token in HTTP-only cookie
-            res.cookie('token', token, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-            });
-            
-            // ✅ Redirect to frontend
-            res.redirect(process.env.CLIENT_URL || 'http://localhost:5173');
-        } catch (error) {
-            console.error('Error in Google callback:', error);
-            res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=auth_error`);
+            console.log('new user:', newUser)
+            await newUser.save();
         }
+
+
+        // ✅ Redirect to frontend
+        res.redirect('http://localhost:5173/');
     }
 );
 
@@ -140,12 +96,7 @@ router.get('/',verifyJWT)
 router.post('/signup', register)
 router.post('/login', login)
 router.post("/logout", (req, res) => {
-    // Clear the cookie with the same options used when setting it
-    res.clearCookie("token", { 
-        httpOnly: true, 
-        secure: process.env.NODE_ENV === 'production', 
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-    });
+    res.clearCookie("token", { httpOnly: true, sameSite: "Lax" }); // ✅ Clears token
     res.status(200).json({ message: "Logged out successfully" });
 });
 

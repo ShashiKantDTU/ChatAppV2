@@ -99,9 +99,7 @@ const DarkSignupForm = () => {
   };
 
   const handleGoogleLogin = () => {
-    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-    // First logout, then redirect to Google auth
-    window.location.href = `${API_URL}/auth/google/logout`;
+    window.location.href = 'http://localhost:3000/auth/google';
   };
 
   return (

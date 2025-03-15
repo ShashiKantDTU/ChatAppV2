@@ -75,43 +75,6 @@ This guide will help you deploy the ChatApp to free tier services.
 3. Test login functionality
 4. Test messaging features
 
-## Setting Up Cloudinary for File Storage
-
-The ChatApp now uses Cloudinary for file storage in production. Follow these steps to configure it:
-
-1. Create a free account at [Cloudinary](https://cloudinary.com/users/register/free)
-2. Once registered, go to your dashboard to find your:
-   - Cloud name
-   - API Key
-   - API Secret
-
-3. Add these credentials to your environment:
-
-### For Development
-Add to your `Backend/.env` file:
-```
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-```
-
-### For Production (Render)
-1. Go to your Render dashboard
-2. Select your backend service
-3. Go to the "Environment" tab
-4. Add the following environment variables:
-   - `CLOUDINARY_CLOUD_NAME` = your_cloud_name
-   - `CLOUDINARY_API_KEY` = your_api_key
-   - `CLOUDINARY_API_SECRET` = your_api_secret
-5. Click "Save Changes" and redeploy your application
-
-## Benefits of Cloudinary
-- 25GB of free storage
-- CDN for fast global delivery
-- Automatic image optimization
-- No server storage limitations
-- Media persists after server restarts
-
 ## Troubleshooting
 
 ### CORS Issues
@@ -130,9 +93,4 @@ If socket connections fail:
 If the app can't connect to MongoDB:
 - Verify your MongoDB Atlas connection string
 - Check that your database user has correct permissions
-- Make sure network access is properly configured
-
-If media isn't displaying properly:
-1. Check your Cloudinary dashboard to ensure files are uploaded
-2. Verify the URLs in your database/messages
-3. Check your browser console for any CORS errors 
+- Make sure network access is properly configured 

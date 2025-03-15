@@ -7,8 +7,7 @@ function GoogleAuth() {
     async function GoogleAuth() {
         try{
         // send a auth request to server to know if user is authenticated or not 
-        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-        const data = await fetch(`${API_URL}/auth/google`,{
+        const data = await fetch('http://localhost:3000/auth/google',{
             method:'GET',
             credentials: 'include'
         })

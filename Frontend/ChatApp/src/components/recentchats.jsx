@@ -62,29 +62,24 @@ const RecentChats = (props) => {
 
   const handleEditProfile = async (formData) => {
     setIsUpdating(true);
-    console.log('Updating profile with:', formData);
+    console.log('formData' , formData)
     try {
-      // Get API URL from environment variables
-      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-      
       // Call the API endpoint to update profile
-      const response = await fetch(`${API_URL}/update-profile`, {
+      const response = await fetch('http://localhost:3000/update-profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
         body: JSON.stringify(formData)
+        
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`Failed to update profile: ${response.status}`);
+        throw new Error('Failed to update profile');
       }
 
       const data = await response.json();
-      console.log('Profile updated successfully:', data);
 
       // Update local state
       setUser(prev => ({
@@ -99,7 +94,7 @@ const RecentChats = (props) => {
 
     } catch (error) {
       console.error('Error updating profile:', error);
-      throw new Error(error.message || 'Failed to update profile');
+      throw new Error('Failed to update profile');
     } finally {
       setIsUpdating(false);
     }

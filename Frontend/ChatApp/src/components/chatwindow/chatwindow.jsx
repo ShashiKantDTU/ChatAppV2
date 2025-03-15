@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import './chatwindow.css';
-import { Phone, Check, Image, Paperclip, Send, X, AlertCircle, Upload, Mic, Square, File, FileText, FileCode, FileSpreadsheet, Presentation, FileArchive, Type, Play, Pause, Trash2, Download, ArrowDown, Video } from 'lucide-react';
+import { Phone, Video, Check, Image, Paperclip, Send, X, AlertCircle, Upload, Mic, Square, File, FileText, FileCode, FileSpreadsheet, Presentation, FileArchive, Type, Play, Pause, Trash2, Download, ArrowDown } from 'lucide-react';
 import Message from './message';
 import scrollToBottom from '../../../scripts/scrolltobottom';
 import TypingIndicator from './typingindicator';
@@ -313,86 +313,93 @@ const ChatWindow = (props) => {
             });
 
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-            console.log('Using API URL for upload:', API_URL);
-            
             const response = await fetch(`${API_URL}/upload`, {
                 method: 'POST',
-                body: formData,
-                credentials: 'include', // Include cookies for auth
+                body: formData
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Upload response not OK:', response.status, errorText);
-                throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
+                throw new Error('Upload failed');
             }
 
             const data = await response.json();
-            console.log('Upload response data:', data);
-            
             if (!data.success) {
                 throw new Error(data.error || 'Upload failed');
             }
 
             console.log(`Server returned ${data.files.length} files`);
 
-            // Process each uploaded file
+            // Process each uploaded file with retry logic
             for (let index = 0; index < data.files.length; index++) {
                 const file = data.files[index];
-                console.log(`Processing file ${index + 1}:`, file);
-                
-                // With Cloudinary, the URL is already absolute and secure
-                const fileUrl = file.url;
-                
-                console.log(`File URL: ${fileUrl}`);
-                
-                // Determine media type based on MIME type
-                let mediaType = 'file'; // Default to file
-                if (file.mimeType.startsWith('image/')) {
-                    mediaType = 'image';
-                } else if (file.mimeType.startsWith('video/')) {
-                    mediaType = 'video';
-                } else if (file.mimeType.startsWith('audio/')) {
-                    mediaType = 'audio';
-                }
-                
-                console.log(`Determined media type: ${mediaType}`);
-                
-                // Create media message
-                const mediaMessage = {
-                    chatid: props.userdata.chatid,
-                    senderid: props.localUser.uid,
-                    recieverid: props.userdata.uid,
-                    messageType: mediaType,
-                    media: {
-                        type: mediaType,
-                        url: fileUrl,
-                        filename: file.filename,
-                        size: file.size,
-                        mimeType: file.mimeType
-                    },
-                    sent: { issent: true, sentat: new Date() },
-                    delivered: { isdelivered: false, deliveredat: null },
-                    read: { isread: false, readat: null },
-                    deletedfor: [],
-                    deletedby: null,
-                    createdat: new Date(),
-                    // Add a unique temporary ID to identify this message locally
-                    _id: `temp_${Date.now()}_${index}`,
-                    reactions: [],
-                    // Add a flag to indicate this is a server message that should be handled by the socket
-                    isBeingSentToServer: true
-                };
+                let retryCount = 0;
+                const maxRetries = 3;
 
-                // IMPORTANT: DON'T add message to UI first - let the socket handler do it
-                // Just send it to the server directly
-                console.log(`Sending media message for file ${index + 1}:`, mediaMessage);
-                props.handlesend(mediaMessage);
-                
-                // Update progress
-                const progress = ((index + 1) / data.files.length) * 100;
-                setUploadProgress(progress);
-                console.log(`Upload progress: ${progress}%`);
+                while (retryCount < maxRetries) {
+                    try {
+                        console.log(`Processing uploaded file ${index + 1}: ${file.filename}`);
+                        
+                        // Determine media type based on mime type
+                        const mimeType = file.mimeType;
+                        let mediaType = 'file';
+                        if (mimeType.startsWith('image/')) {
+                            mediaType = 'image';
+                        } else if (mimeType.startsWith('video/')) {
+                            mediaType = 'video';
+                        } else if (mimeType.startsWith('audio/')) {
+                            mediaType = 'audio';
+                        }
+
+                        // Create media message
+                        const mediaMessage = {
+                            chatid: props.userdata.chatid,
+                            senderid: props.localUser.uid,
+                            recieverid: props.userdata.uid,
+                            messageType: mediaType,
+                            media: {
+                                type: mediaType,
+                                url: file.url,
+                                filename: file.filename,
+                                size: file.size,
+                                mimeType: file.mimeType
+                            },
+                            sent: { issent: true, sentat: new Date() },
+                            delivered: { isdelivered: false, deliveredat: null },
+                            read: { isread: false, readat: null },
+                            deletedfor: [],
+                            deletedby: null,
+                            createdat: new Date(),
+                            // Add a unique temporary ID to identify this message locally
+                            _id: `temp_${Date.now()}_${index}`,
+                            reactions: [],
+                            // Add a flag to indicate this is a server message that should be handled by the socket
+                            isBeingSentToServer: true
+                        };
+
+                        // IMPORTANT: DON'T add message to UI first - let the socket handler do it
+                        // Just send it to the server directly
+                        console.log(`Sending media message for file ${index + 1}`);
+                        props.handlesend(mediaMessage);
+                        
+                        // Update progress
+                        const progress = ((index + 1) / data.files.length) * 100;
+                        setUploadProgress(progress);
+                        console.log(`Upload progress: ${progress}%`);
+                        
+                        // If successful, break the retry loop
+                        break;
+                    } catch (error) {
+                        retryCount++;
+                        console.error(`Error processing file ${index + 1}, attempt ${retryCount}:`, error);
+                        
+                        if (retryCount === maxRetries) {
+                            throw new Error(`Failed to process file ${file.filename} after ${maxRetries} attempts`);
+                        }
+                        
+                        // Wait before retrying
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                    }
+                }
             }
 
             console.log('All files processed and sent');
@@ -700,23 +707,16 @@ const ChatWindow = (props) => {
             formData.append('file', audioBlob, 'audio.webm');
 
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-            console.log('Using API URL for audio upload:', API_URL);
-            
             const response = await fetch(`${API_URL}/upload`, {
                 method: 'POST',
-                body: formData,
-                credentials: 'include' // Include cookies for auth
+                body: formData
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Audio upload response not OK:', response.status, errorText);
-                throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
+                throw new Error('Upload failed');
             }
 
             const data = await response.json();
-            console.log('Audio upload response data:', data);
-            
             if (!data.success) {
                 throw new Error(data.error || 'Upload failed');
             }
@@ -731,16 +731,6 @@ const ChatWindow = (props) => {
 
             console.log('Successfully uploaded audio file:', uploadedFile);
 
-            // Ensure the URL is absolute by prepending API_URL if needed
-            let fileUrl = uploadedFile.url;
-            if (fileUrl && !fileUrl.startsWith('http') && !fileUrl.startsWith('data:')) {
-                // If the URL is relative, make it absolute
-                fileUrl = fileUrl.startsWith('/') 
-                    ? `${API_URL}${fileUrl}` 
-                    : `${API_URL}/${fileUrl}`;
-                console.log(`Converted relative audio URL to absolute: ${fileUrl}`);
-            }
-
             // Create audio message
             const audioMessage = {
                 chatid: props.userdata.chatid,
@@ -749,7 +739,7 @@ const ChatWindow = (props) => {
                 messageType: 'audio',
                 media: {
                     type: 'audio',
-                    url: fileUrl,
+                    url: uploadedFile.url,
                     filename: uploadedFile.filename,
                     size: uploadedFile.size,
                     mimeType: uploadedFile.mimeType
@@ -769,7 +759,7 @@ const ChatWindow = (props) => {
             
             // IMPORTANT: DON'T add message to UI first - let the socket handler do it
             // Just send it to the server directly
-            console.log('Sending audio message:', audioMessage);
+            console.log('Sending audio message');
             props.handlesend(audioMessage);
 
             // Clean up audio recording state
@@ -839,19 +829,7 @@ const ChatWindow = (props) => {
     // Add this new function to handle media download
     const handleMediaDownload = async (mediaUrl, filename) => {
         try {
-            // For Cloudinary, URLs are already absolute, so we don't need to modify them
-            // Just ensure we have a valid URL
-            let downloadUrl = mediaUrl;
-            
-            console.log('Downloading from URL:', downloadUrl);
-            const response = await fetch(downloadUrl, {
-                credentials: 'include' // Include cookies for auth
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
-            }
-            
+            const response = await fetch(mediaUrl);
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1000,6 +978,9 @@ const ChatWindow = (props) => {
                         disabled={!props.socket}
                     >
                         <Phone size={24} color='white' />
+                    </button>
+                    <button className='chatheaderbtn'>
+                        <Video size={24} color='white' />
                     </button>
                 </div>
             </div>

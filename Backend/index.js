@@ -12,8 +12,6 @@ const { send } = require('process');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const app = express();
 const server = http.createServer(app);
@@ -44,46 +42,23 @@ app.use((req, res, next) => {
 // Middleware for routes
 app.use(router);
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'your-cloud-name', // Replace placeholder in production
-  api_key: process.env.CLOUDINARY_API_KEY || 'your-api-key', // Replace placeholder in production
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'your-api-secret' // Replace placeholder in production
-});
+// Create uploads directory if it doesn't exist
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
 
-// Set up Cloudinary storage for regular uploads
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'chatapp_uploads',
-    resource_type: 'auto', // auto-detect file type
-    // Optional transformation for images
-    transformation: [
-      { quality: 'auto:good' } // Automatically optimize quality
-    ]
-  }
-});
-
-// Set up Cloudinary storage for profile images
-const profileImageStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'profile_images',
-    format: 'jpg', // Force jpg format for consistency
-    resource_type: 'image',
-    transformation: [
-      { width: 400, height: 400, crop: 'fill', gravity: 'face' }, // Crop to face when possible
-      { quality: 'auto:good' } // Optimize for web
-    ],
-    // Add a unique identifier to prevent caching issues on update
-    public_id: (req, file) => {
-      const userId = req.query.userId || 'user';
-      return `${userId}_${Date.now()}`;
+// Configure multer for file upload
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
     }
-  }
 });
 
-// Regular file upload multer config
 const upload = multer({
     storage: storage,
     limits: {
@@ -122,25 +97,8 @@ const upload = multer({
     }
 });
 
-// Profile image upload multer config
-const profileImageUpload = multer({
-    storage: profileImageStorage,
-    limits: {
-        fileSize: 5 * 1024 * 1024 // 5MB limit for profile pics
-    },
-    fileFilter: function (req, file, cb) {
-        // Only allow image files for profile pictures
-        const allowedTypes = [
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp'
-        ];
-        
-        if (allowedTypes.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Invalid file type. Only JPG, PNG, GIF and WebP images are allowed for profile pictures.'));
-        }
-    }
-});
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // File upload endpoint
 app.post('/upload', upload.array('file', 10), (req, res) => {
@@ -149,15 +107,13 @@ app.post('/upload', upload.array('file', 10), (req, res) => {
             throw new Error('No files uploaded');
         }
 
-        // Cloudinary provides full URLs in the result
+        // Handle multiple files
         const files = req.files.map(file => ({
-            url: file.path, // Cloudinary URL
+            url: `http://localhost:3000/uploads/${file.filename}`,
             filename: file.originalname,
             size: file.size,
             mimeType: file.mimetype
         }));
-
-        console.log('Uploaded files to Cloudinary:', files);
 
         res.json({
             success: true,
@@ -165,31 +121,6 @@ app.post('/upload', upload.array('file', 10), (req, res) => {
         });
     } catch (error) {
         console.error('Upload error:', error);
-        res.status(400).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// Profile image upload endpoint
-app.post('/upload-profile-image', profileImageUpload.single('profileImage'), (req, res) => {
-    try {
-        if (!req.file) {
-            throw new Error('No profile image uploaded');
-        }
-
-        // Cloudinary provides the full URL in the result
-        const profileImageUrl = req.file.path;
-
-        console.log('Uploaded profile image to Cloudinary:', profileImageUrl);
-
-        res.json({
-            success: true,
-            profileImageUrl: profileImageUrl
-        });
-    } catch (error) {
-        console.error('Profile image upload error:', error);
         res.status(400).json({
             success: false,
             error: error.message
@@ -685,38 +616,28 @@ io.on('connection', (socket) => {
             }
             
             const calledUser = await User.findOne({ uid: userToCall });
-            if (!calledUser) {
-                throw new Error('User not found');
-            }
-            
-            if (!calledUser.socketid) {
-                throw new Error('User is offline');
+            if (!calledUser || !calledUser.socketid) {
+                throw new Error('User is not available');
             }
 
             console.log('Sending incoming call to:', calledUser.socketid);
             
-            // Ensure the offer has type and SDP fields
+            // Always ensure the offer has the correct type
             const formattedOffer = {
                 type: 'offer',
                 sdp: offer.sdp
             };
 
-            // Send the call to the recipient
+            console.log('Sending formatted offer:', formattedOffer);
+            
             io.to(calledUser.socketid).emit('incoming-call', {
                 from,
                 offer: formattedOffer
             });
-
-            // Send confirmation to caller
-            socket.emit('call-initiated', { 
-                to: userToCall,
-                status: 'ringing'
-            });
         } catch (error) {
             console.error('Error in call-user handler:', error);
             socket.emit('call-failed', { 
-                error: error.message,
-                details: 'Failed to initiate call'
+                error: error.message
             });
         }
     });
@@ -737,75 +658,41 @@ io.on('connection', (socket) => {
             }
 
             const callingUser = await User.findOne({ uid: to });
-            if (!callingUser) {
-                throw new Error('Calling user not found');
-            }
-            
-            if (!callingUser.socketid) {
-                throw new Error('Calling user is offline');
+            if (!callingUser || !callingUser.socketid) {
+                throw new Error('Calling user not available');
             }
 
             console.log('Sending answer to caller:', callingUser.socketid);
             
-            // Ensure the answer has the correct type
+            // Always ensure the answer has the correct type
             const formattedAnswer = {
                 type: 'answer',
                 sdp: answer.sdp
             };
 
-            console.log('Sending formatted answer');
+            console.log('Sending formatted answer:', formattedAnswer);
             
             io.to(callingUser.socketid).emit('call-answered', {
                 answer: formattedAnswer
             });
-
-            // Send confirmation to the answerer
-            socket.emit('answer-sent', {
-                to: to,
-                status: 'connecting'
-            });
         } catch (error) {
             console.error('Error in call-answered handler:', error);
             socket.emit('call-failed', {
-                error: error.message,
-                details: 'Failed to send answer'
+                error: error.message
             });
         }
     });
 
     socket.on('ice-candidate', async ({ to, candidate }) => {
         try {
-            if (!candidate) {
-                console.log('Empty ICE candidate received, ignoring');
-                return;
+            const user = await User.findOne({ uid: to });
+            if (user && user.socketid) {
+                io.to(user.socketid).emit('ice-candidate', {
+                    candidate
+                });
             }
-
-            console.log('ICE candidate received for', to, {
-                type: candidate.type,
-                protocol: candidate.protocol || 'unknown'
-            });
-
-            const targetUser = await User.findOne({ uid: to });
-            if (!targetUser) {
-                console.error('Target user not found for ICE candidate');
-                return;
-            }
-            
-            if (!targetUser.socketid) {
-                console.error('Target user is offline');
-                return;
-            }
-
-            console.log('Forwarding ICE candidate to:', targetUser.socketid);
-            io.to(targetUser.socketid).emit('ice-candidate', {
-                candidate
-            });
         } catch (error) {
             console.error('Error in ice-candidate handler:', error);
-            socket.emit('call-failed', {
-                error: 'ICE candidate relay failed',
-                details: error.message
-            });
         }
     });
 
@@ -813,10 +700,7 @@ io.on('connection', (socket) => {
         try {
             const user = await User.findOne({ uid: to });
             if (user && user.socketid) {
-                console.log('Ending call for user:', user.socketid);
                 io.to(user.socketid).emit('call-ended');
-            } else {
-                console.log('Could not end call - user not found or offline');
             }
         } catch (error) {
             console.error('Error in end-call handler:', error);
