@@ -13,8 +13,8 @@
     -webkit-backdrop-filter: blur(8px);
 }
 
-.callContent {
-    background: var(--item-bg);
+.voiceCallCard {
+    background: var(--item-bg, #1a1a1a);
     padding: 2rem;
     border-radius: 24px;
     display: flex;
@@ -24,43 +24,78 @@
     min-width: 320px;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--border-color);
-    box-shadow: 0 8px 32px var(--shadow-color);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    box-shadow: 0 8px 32px var(--shadow-color, rgba(0, 0, 0, 0.2));
 }
 
-.callerImage {
-    width: 120px;
-    height: 120px;
-    border-radius: 60px;
-    object-fit: cover;
-    border: 3px solid var(--button-gradient-1);
-    padding: 3px;
-    background: var(--item-bg);
-    box-shadow: 0 8px 32px var(--shadow-color);
+.callHeader {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-.callerName {
+.callHeader h3 {
     font-size: 1.5rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-primary, white);
     margin: 0;
-    text-align: center;
 }
 
 .callStatus {
     font-size: 1.1rem;
-    color: var(--text-secondary);
+    color: var(--text-secondary, #a0a0a0);
     margin: 0;
-    text-align: center;
 }
 
-.controls {
+.errorMessage {
+    color: #ef4444;
+    font-size: 0.875rem;
+    margin: 0.5rem 0 0;
+}
+
+.userAvatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 3px solid var(--button-gradient-1, #4f46e5);
+    padding: 3px;
+    background: var(--item-bg, #1a1a1a);
+    box-shadow: 0 8px 32px var(--shadow-color, rgba(0, 0, 0, 0.2));
+}
+
+.userAvatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.defaultAvatar {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #4f46e5, #9333ea);
+    color: white;
+    font-size: 3rem;
+    font-weight: bold;
+    border-radius: 50%;
+}
+
+.callActions {
     display: flex;
     gap: 1.5rem;
     margin-top: 1rem;
 }
 
-.controlButton {
+.callButton {
     width: 56px;
     height: 56px;
     border-radius: 28px;
@@ -70,44 +105,54 @@
     justify-content: center;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    background: var(--item-bg);
-    color: var(--text-primary);
-    box-shadow: 0 4px 15px var(--shadow-color);
-    border: 1px solid var(--border-color);
+    background: var(--item-bg, #1a1a1a);
+    color: var(--text-primary, white);
+    box-shadow: 0 4px 15px var(--shadow-color, rgba(0, 0, 0, 0.2));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
 }
 
-.controlButton:hover {
+.callButton:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 8px 25px var(--shadow-color);
+    box-shadow: 0 8px 25px var(--shadow-color, rgba(0, 0, 0, 0.2));
 }
 
-.controlButton.muted {
-    background: var(--item-hover);
+.callButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.callButton.active {
+    background: var(--item-hover, #2a2a2a);
     color: #ef4444;
 }
 
-.controlButton.endCall {
+.callButton.acceptButton {
+    background: #10b981;
+    color: white;
+}
+
+.callButton.acceptButton:hover {
+    background: #059669;
+}
+
+.callButton.declineButton,
+.callButton.endButton {
     background: #ef4444;
     color: white;
 }
 
-.controlButton.endCall:hover {
+.callButton.declineButton:hover,
+.callButton.endButton:hover {
     background: #dc2626;
 }
 
 @media (max-width: 640px) {
-    .callContent {
+    .voiceCallCard {
         padding: 1.5rem;
         min-width: 280px;
     }
 
-    .callerImage {
-        width: 100px;
-        height: 100px;
-        border-radius: 50px;
-    }
-
-    .callerName {
+    .callHeader h3 {
         font-size: 1.25rem;
     }
 
@@ -115,7 +160,17 @@
         font-size: 1rem;
     }
 
-    .controlButton {
+    .userAvatar {
+        width: 100px;
+        height: 100px;
+        border-radius: 50px;
+    }
+
+    .defaultAvatar {
+        font-size: 2.5rem;
+    }
+
+    .callButton {
         width: 48px;
         height: 48px;
         border-radius: 24px;
