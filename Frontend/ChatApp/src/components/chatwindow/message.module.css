@@ -1,0 +1,665 @@
+/* message.module.css */
+/* Base message container */
+.messageContainer {
+  display: flex;
+  align-items: flex-end;
+  margin-bottom: 16px;
+  position: relative;
+  transition: all 0.3s ease;
+  max-width: 85%;
+}
+
+.sent {
+  justify-content: flex-end;
+  margin-left: auto;
+  transform-origin: bottom right;
+}
+
+.received {
+  justify-content: flex-start;
+  margin-right: auto;
+  transform-origin: bottom left;
+}
+
+/* Avatar styling */
+.userAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin: 0 8px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.userAvatar:hover {
+  transform: scale(1.1);
+}
+
+/* Message bubble styling */
+.messageBubble {
+  position: relative;
+  border-radius: 18px;
+  padding: 12px 16px;
+  max-width: 100%;
+  min-width: 90px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.messageBubble:hover {
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sentBubble {
+  background-color: #8aa3bb;
+  color: white;
+  border-bottom-right-radius: 4px;
+  background-image: linear-gradient(135deg, #0084ff, #0099ff);
+}
+
+.receivedBubble {
+  background-color: #f0f2f5;
+  color: #1c1e21;
+  border-bottom-left-radius: 4px;
+}
+
+/* Message content styling */
+.messageContent {
+  position: relative;
+  z-index: 1;
+}
+
+.messageText {
+  margin: 0;
+  line-height: 1.5;
+  word-wrap: break-word;
+  font-size: 15px;
+}
+
+.messageMeta {
+  display: flex;
+  align-items: center;
+  margin-top: 5px;
+  justify-content: flex-end;
+}
+
+.timestamp {
+  font-size: 11px;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.messageBubble:hover .timestamp {
+  opacity: 1;
+}
+
+/* Message status indicators */
+.deliveryStatus {
+  display: flex;
+  margin-left: 4px;
+  align-items: center;
+}
+
+.deliveryIcon {
+  opacity: 0.85;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.delivered.first {
+  position: absolute;
+  margin-left: -4px;
+}
+
+.delivered.second {
+  margin-left: 4px;
+}
+
+.pending {
+  opacity: 0.6;
+}
+
+/* Read indicator special styling */
+.read {
+  color: #34b7f1;
+}
+
+/* Bubble decoration */
+.messageDecoration {
+  position: absolute;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.sentBubble .messageDecoration {
+  right: -7px;
+  background: linear-gradient(to bottom right, #0084ff 50%, transparent 50%);
+}
+
+.receivedBubble .messageDecoration {
+  left: -7px;
+  background: linear-gradient(to bottom left, #f0f2f5 50%, transparent 50%);
+}
+
+/* Deleted message styling */
+.deletedMessage {
+  font-style: italic;
+  color: #888;
+  opacity: 0.8;
+}
+
+.deletedMessage .messageText {
+  text-decoration: line-through;
+  text-decoration-color: rgba(136, 136, 136, 0.5);
+  text-decoration-thickness: 1px;
+}
+
+/* Different style for messages deleted by the current user */
+.deletedMessage[data-deleted-by="current-user"] .messageText {
+  color: #f56565;
+}
+
+/* Different style for messages deleted by the other user */
+.deletedMessage[data-deleted-by="other-user"] .messageText {
+  color: #9e9e9e;
+}
+
+/* Message options and delete functionality */
+.messageOptions {
+  position: absolute;
+  top: -90px;
+  right: 5px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  z-index: 100;
+  animation: slideDown 0.2s ease;
+  transform-origin: top center;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 150px;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.deleteButton {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: transparent;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  color: #ff3b30;
+  transition: background-color 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.deleteButton:hover {
+  background-color: rgba(255, 59, 48, 0.1);
+}
+
+/* Reaction styling */
+.messageReaction {
+  position: relative;
+  margin: 0 5px;
+  z-index: 5;
+}
+
+.reactionButton {
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: #f0f2f5;
+  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.reactionButton:hover {
+  background-color: #e4e6eb;
+  transform: scale(1.1);
+}
+
+.activeReaction {
+  background-color: #f3f4f6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.reactionIcon {
+  transition: transform 0.2s ease;
+}
+
+.reactionButton:hover .reactionIcon {
+  transform: scale(1.2);
+}
+
+.selectedEmoji {
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.reactionPicker {
+  position: fixed;
+  top: auto;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  display: flex;
+  background-color: white;
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform-origin: bottom center;
+  min-width: 300px;
+  max-width: 350px;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+}
+
+/* Adjust alignment based on message type */
+.sent .reactionPicker {
+  right: 20px;
+}
+
+.received .reactionPicker {
+  left: 20px;
+}
+
+.reactionPickerContent {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 400px;
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Note: .rightAligned styles have been removed as we're using parent class styles instead */
+
+.reactionsContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.reactionBadge {
+  display: flex;
+  align-items: center;
+  padding: 2px 6px;
+  background-color: rgba(79, 70, 229, 0.1);
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reactionBadge:hover {
+  background-color: rgba(79, 70, 229, 0.2);
+  transform: scale(1.05);
+}
+
+.userReacted {
+  background-color: rgba(79, 70, 229, 0.25);
+  border: 1px solid rgba(79, 70, 229, 0.3);
+  position: relative;
+}
+
+.userReacted:after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background-color: rgba(79, 70, 229, 0.8);
+  border-radius: 50%;
+}
+
+.receivedBubble .reactionBadge {
+  background-color: rgba(99, 102, 241, 0.1);
+}
+
+.receivedBubble .reactionBadge:hover {
+  background-color: rgba(99, 102, 241, 0.2);
+}
+
+.receivedBubble .userReacted {
+  background-color: rgba(99, 102, 241, 0.25);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.reactionEmoji {
+  font-size: 14px;
+  line-height: 1;
+  margin-right: 4px;
+}
+
+.reactionCount {
+  font-size: 11px;
+  margin-left: 2px;
+  font-weight: 500;
+  color: rgba(55, 65, 81, 0.8);
+}
+
+/* Typing indicator */
+.typingBubble {
+  min-width: 60px;
+  padding: 12px 16px;
+  height: 38px;
+  background-color: #f0f2f5;
+}
+
+.typingIndicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 16px;
+}
+
+.typingDot {
+  width: 8px;
+  height: 8px;
+  background-color: #65676b;
+  border-radius: 50%;
+  display: inline-block;
+  opacity: 0.7;
+}
+
+/* Animate each dot with a slight delay */
+.typingDot:nth-child(1) {
+  animation: typingBounce 1.3s infinite ease-in-out;
+}
+
+.typingDot:nth-child(2) {
+  animation: typingBounce 1.3s infinite ease-in-out 0.2s;
+}
+
+.typingDot:nth-child(3) {
+  animation: typingBounce 1.3s infinite ease-in-out 0.4s;
+}
+
+/* Entry animations */
+.animate {
+  animation: messageEntry 0.4s ease-out;
+}
+
+.sent.animate {
+  animation-name: messageSentEntry;
+}
+
+.received.animate {
+  animation-name: messageReceivedEntry;
+}
+
+@keyframes messageEntry {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes messageSentEntry {
+  from {
+    opacity: 0;
+    transform: translateY(10px) translateX(10px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+}
+
+@keyframes messageReceivedEntry {
+  from {
+    opacity: 0;
+    transform: translateY(10px) translateX(-10px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+}
+
+/* Bounce animation for typing indicator */
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* Subtle pulse effect for typing bubble */
+.typingBubble {
+  animation: subtlePulse 2s infinite ease-in-out;
+}
+
+@keyframes subtlePulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.mediaContainer {
+    max-width: 300px;
+    margin: 4px 0;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.mediaImage {
+    width: 100%;
+    height: auto;
+    max-height: 300px;
+    object-fit: cover;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.mediaImage:hover {
+    transform: scale(1.02);
+}
+
+.videoWrapper {
+    position: relative;
+    width: 100%;
+    padding-top: 56.25%; /* 16:9 Aspect Ratio */
+}
+
+.mediaVideo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.videoOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+
+.audioWrapper {
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.mediaAudio {
+    width: 100%;
+    height: 40px;
+}
+
+.fileWrapper {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    gap: 8px;
+}
+
+.fileLink {
+    color: var(--text-primary);
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.fileLink:hover {
+    text-decoration: underline;
+}
+
+.mediaInfo {
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8em;
+}
+
+.mediaName {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.mediaSize {
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+/* Dark theme adjustments */
+:global(.darkTheme) .mediaContainer {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+:global(.darkTheme) .mediaInfo {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+:global(.darkTheme) .fileLink {
+    color: var(--text-primary);
+}
+
+:global(.darkTheme) .mediaName {
+    color: var(--text-primary);
+}
+
+:global(.darkTheme) .mediaSize {
+    color: var(--text-secondary);
+}
+
+.removeReactionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.currentReaction {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.currentReactionEmoji {
+  font-size: 18px;
+  background-color: white;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.currentReactionText {
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.removeReactionButton {
+  background-color: transparent;
+  border: none;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.removeReactionButton:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.deleteForEveryone {
+  color: #e53e3e;
+  font-weight: 600;
+  border-top: 1px solid rgba(229, 62, 62, 0.2);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+.deleteForEveryone:hover {
+  background-color: rgba(229, 62, 62, 0.1);
+}

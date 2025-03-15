@@ -1,0 +1,203 @@
+/* ProfileHeader.module.css */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, var(--section-gradient-1), var(--section-gradient-2)); /* Use theme variables */
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 2px 4px var(--shadow-color);
+  position: relative;
+  z-index: 10;
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.avatarContainer {
+  position: relative;
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent-primary);
+  box-shadow: 0 2px 4px var(--shadow-color);
+  transition: transform 0.2s ease;
+}
+
+.avatar:hover {
+  transform: scale(1.05);
+}
+
+.statusIndicator {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--card-bg);
+}
+
+.userDetails {
+  display: flex;
+  flex-direction: column;
+}
+
+.username {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  background: none;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: var(--text-primary);
+}
+
+.uidRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.profession {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
+.uidcopybtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent-primary);
+  transition: color 0.2s ease;
+}
+
+.uidcopybtn:hover {
+  color: var(--accent-secondary);
+}
+
+.tooltip {
+  position: absolute;
+  top: -1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px var(--shadow-color);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.iconButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent-primary);
+  position: relative;
+}
+
+.notificationCount {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.5rem;
+  background: var(--accent-secondary);
+  color: white;
+  border-radius: 50%;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 2px 4px var(--shadow-color);
+}
+
+.editButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  background: linear-gradient(45deg, var(--accent-primary), var(--accent-secondary));
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.editButton:hover {
+  transform: translateY(-1px);
+}
+
+.editButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Dark Mode Specific Styles */
+.darkTheme .header {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+.darkTheme .tooltip {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.darkTheme .editButton {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.darkTheme .editButton:hover {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+/* Light Mode Specific Styles */
+.lightTheme .header {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+.lightTheme .tooltip {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.lightTheme .editButton {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.lightTheme .editButton:hover {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}

@@ -1,0 +1,295 @@
+/* message.module.css */
+.messageContainer {
+    display: flex;
+    align-items: flex-end;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  
+  .sent {
+    justify-content: flex-end;
+  }
+  
+  .received {
+    justify-content: flex-start;
+  }
+  
+  .animate {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .userAvatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-left: 8px;
+    margin-right: 8px;
+  }
+  
+  .messageBubble {
+    position: relative;
+    border-radius: 18px;
+    padding: 10px 14px;
+    max-width: 70%;
+    min-width: 90px;
+  }
+  
+  .sentBubble {
+    background-color: #007bff; /* Blue color for sent messages */
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  
+.receivedBubble {
+    background-color: #e0e0e0; /* Light gray for received messages */
+    color: #333;
+    border-bottom-left-radius: 4px;
+}
+  
+  .messageContent {
+    position: relative;
+  }
+  
+  .messageText {
+    margin: 0;
+    line-height: 1.4;
+    word-wrap: break-word;
+  }
+  
+  .messageMeta {
+    display: flex;
+    align-items: center;
+    margin-top: 4px;
+    justify-content: flex-end;
+  }
+  
+  .timestamp {
+    font-size: 12px;
+    opacity: 0.8;
+  }
+  
+  .deliveryStatus {
+    display: flex;
+    margin-left: 4px;
+  }
+  
+  .deliveryIcon {
+    opacity: 0.8;
+  }
+  
+  .delivered.first {
+    position: absolute;
+    margin-left: -3px;
+  }
+  
+  .delivered.second {
+    margin-left: 3px;
+  }
+  
+  .pending {
+    opacity: 0.6;
+  }
+  
+  .messageDecoration {
+    position: absolute;
+    bottom: 0;
+    width: 12px;
+    height: 12px;
+  }
+  
+  .sentBubble .messageDecoration {
+    right: -6px;
+    background: linear-gradient(to bottom right, #007bff 50%, transparent 50%);
+  }
+  
+  .receivedBubble .messageDecoration {
+    left: -6px;
+    background: linear-gradient(to bottom left, #e0e0e0 50%, transparent 50%);
+  }
+  
+  /* Reaction styles */
+  .messageReaction {
+    position: relative;
+    margin: 0 4px;
+  }
+  
+  .reactionButton {
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: #f0f2f5;
+    transition: all 0.2s;
+  }
+  
+  .reactionButton:hover {
+    background-color: #e4e6eb;
+  }
+  
+  .activeReaction {
+    background-color: #e6f2ff;
+  }
+  
+  .reactionIcon {
+    color: #65676b;
+  }
+  
+  .reactionPicker {
+    position: absolute;
+    bottom: 30px;
+    /* width: 200px; */
+    left: 0;
+    display: flex;
+    background-color: white;
+    border-radius: 24px;
+    padding: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+  }
+  
+  .rightAligned {
+    left: auto;
+    right: 0;
+  }
+  
+  .reactionOption {
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: transform 0.2s, background-color 0.2s;
+    margin: 0 4px;
+  }
+  
+  .reactionOption:hover {
+    transform: scale(1.2);
+    background-color: #f0f2f5;
+  }
+  
+  .selectedReaction {
+    background-color: #e6f2ff;
+  }
+  
+  .reactionsContainer {
+    display: flex;
+    margin-top: 4px;
+    gap: 4px;
+  }
+  
+  .reactionBadge {
+    display: flex;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 2px 6px;
+    font-size: 12px;
+  }
+  
+  .receivedBubble .reactionBadge {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
+  
+  .reactionCount {
+    margin-left: 4px;
+    font-weight: 500;
+  }
+  
+
+
+  /* Add these styles to your message.module.css file */
+
+.typingBubble {
+    min-width: 60px;
+    padding: 12px 16px;
+    height: 38px;
+  }
+  
+  .typingIndicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  
+  .typingDot {
+    width: 8px;
+    height: 8px;
+    background-color: #888;
+    border-radius: 50%;
+    display: inline-block;
+    opacity: 0.6;
+  }
+  
+  /* Animate each dot with a slight delay */
+  .typingDot:nth-child(1) {
+    animation: typingBounce 1.3s infinite ease-in-out;
+  }
+  
+  .typingDot:nth-child(2) {
+    animation: typingBounce 1.3s infinite ease-in-out 0.2s;
+  }
+  
+  .typingDot:nth-child(3) {
+    animation: typingBounce 1.3s infinite ease-in-out 0.4s;
+  }
+  
+  /* Bounce animation */
+  @keyframes typingBounce {
+    0%, 60%, 100% {
+      transform: translateY(0);
+      opacity: 0.6;
+    }
+    30% {
+      transform: translateY(-6px);
+      opacity: 1;
+    }
+  }
+  
+  /* Add a subtle pulse effect to the bubble */
+  .typingBubble {
+    animation: subtlePulse 2s infinite ease-in-out;
+  }
+  
+  @keyframes subtlePulse {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.02);
+    }
+  }
+  
+  /* Add a fade-in effect when the typing indicator appears */
+  .typingBubble {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  

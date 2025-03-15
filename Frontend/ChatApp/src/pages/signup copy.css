@@ -1,0 +1,151 @@
+:root {
+    --background: hsl(240 10% 6%);
+    --surface: hsl(240 10% 9%);
+    --primary: hsl(263 70% 50%);
+    --text: hsl(0 0% 98%);
+    --error: hsl(0 72% 51%);
+    --success: hsl(142 76% 36%);
+    --border: hsl(240 5% 26%);
+  }
+  
+  .signup-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background-color: var(--background);
+  }
+  
+  .signup-form {
+    width: 100%;
+    max-width: 28rem;
+    padding: 2rem;
+    border-radius: 1rem;
+    background-color: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .input-container {
+    position: relative;
+    margin-bottom: 1.5rem;
+  }
+  
+  .input-field {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    border: 2px solid var(--border);
+    background-color: hsl(240 10% 12%);
+    transition: border-color 0.3s;
+  }
+  
+  .input-field.error {
+    border-color: var(--error);
+  }
+  
+  .input-field.focused {
+    border-color: var(--primary);
+  }
+  
+  .icon {
+    flex-shrink: 0;
+    color: hsl(240 5% 45%);
+  }
+  
+  .icon.error {
+    color: var(--error);
+  }
+  
+  .icon.focused {
+    color: var(--primary);
+  }
+  
+  input {
+    width: 100%;
+    background: transparent;
+    outline: none;
+    font-size: 0.875rem;
+    color: var(--text);
+    padding: 3px 15px;
+    box-sizing: border-box;
+    border-radius: 20px;
+  }
+  
+  .error-message {
+    position: absolute;
+    left: 1rem;
+    bottom: -1.25rem;
+    font-size: 0.75rem;
+    color: var(--error);
+  }
+  
+  .success-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .success-icon {
+    color: var(--success);
+    margin: 0 auto 1rem;
+    animation: pulse 2s infinite;
+  }
+  
+  .success-message {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  
+  .form-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 2rem;
+    color: var(--text);
+  }
+  
+  .password-strength {
+    height: 0.25rem;
+    border-radius: 9999px;
+    background-color: rgba(var(--primary), 0.1);
+    overflow: hidden;
+  }
+  
+  .strength-indicator {
+    height: 100%;
+    background-color: var(--primary);
+    transition: width 0.5s;
+  }
+  
+  .submit-button {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    background-color: var(--primary);
+    color: var(--text);
+    transition: background-color 0.3s;
+  }
+  
+  .terms-text {
+    text-align: center;
+    font-size: 0.75rem;
+    margin-top: 1.5rem;
+    color: hsl(240 5% 45%);
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+  }
+  

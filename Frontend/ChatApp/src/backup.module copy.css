@@ -1,0 +1,131 @@
+h1 {
+  margin: 0;
+  padding: 0;
+}
+
+.main {
+  height: 100vh;
+  display: flex;
+  flex-direction: row;
+  border: solid black;
+  box-sizing: border-box;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+}
+
+.panel {
+  width: 70px;
+  border: solid 1px blue;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 20px, 0;
+  box-sizing: border-box;
+
+  backdrop-filter: blur(10px);
+}
+
+/* ALL ELEMENTS INSIDE PANEL */
+
+.panelbtns {
+  width: 70%;
+  cursor: pointer;
+  border-radius: 10px;
+  margin: 8px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.panelbtns:hover {
+  background-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.1);
+}
+
+
+
+
+
+
+
+
+
+
+/* ALL ELEMENTS INSIDE PANEL */
+
+
+
+
+
+.searchdiv {
+  display: flex;
+  flex-direction: column;
+  /* justify-content: center; */
+  align-items: center;
+  overflow: hidden;
+  transition: all 0.3s ease;
+
+}
+
+.searchdivcontent {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  
+  overflow: hidden;
+
+}
+
+
+
+
+
+
+
+
+.aside {
+  width: 400px;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.asidecontent {
+  width: 400px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  
+  overflow: hidden;
+}
+
+
+.recentchatscontainer {
+  height: 100%;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+
+}
+
+
+.chat {
+  flex: 1;
+  border: solid   green;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+ 
+}
+

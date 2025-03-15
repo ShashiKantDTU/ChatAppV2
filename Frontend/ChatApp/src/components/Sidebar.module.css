@@ -1,0 +1,375 @@
+.sidebar {
+  width: 280px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, 
+    rgba(var(--bg-primary-rgb), 0.95),
+    rgba(var(--bg-secondary-rgb), 0.95)
+  );
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  z-index: 10;
+  border-right: 1px solid rgba(var(--border-color-rgb), 0.1);
+  transition: all 0.3s ease-in-out;
+}
+
+.sidebarLogo {
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(var(--border-color-rgb), 0.1);
+}
+
+.logoWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.logoIcon {
+  width: 32px;
+  height: 32px;
+  color: var(--accent-primary);
+  filter: drop-shadow(0 2px 4px rgba(var(--accent-primary-rgb), 0.2));
+  transition: all 0.3s ease;
+}
+
+.logoText {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.themeToggle {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.themeToggle:hover {
+  background: rgba(var(--bg-tertiary-rgb), 0.8);
+  color: var(--accent-primary);
+  transform: rotate(15deg);
+}
+
+.nav {
+  flex: 1;
+  padding: 1.5rem 1rem 1rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  position: relative;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.navItem:hover {
+  color: var(--text-primary);
+  background: rgba(var(--bg-tertiary-rgb), 0.7);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  transform: translateY(-2px);
+  border-color: rgba(var(--border-color-rgb), 0.1);
+  box-shadow: var(--shadow-sm);
+}
+
+.navItem.active {
+  color: var(--accent-primary);
+  background: rgba(var(--accent-primary-rgb), 0.08);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  border-color: rgba(var(--accent-primary-rgb), 0.1);
+  font-weight: 600;
+  box-shadow: 
+    0 4px 8px -2px rgba(var(--accent-primary-rgb), 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+.navItem.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 60%;
+  background: linear-gradient(to bottom, var(--accent-primary), var(--accent-secondary));
+  border-radius: 0 4px 4px 0;
+}
+
+.navIcon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.navItem:hover .navIcon,
+.navItem.active .navIcon {
+  transform: scale(1.1);
+}
+
+.navText {
+  flex: 1;
+}
+
+.badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--accent-primary-rgb), 0.1);
+  color: var(--accent-primary);
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  min-width: 20px;
+  height: 20px;
+  transition: all 0.3s ease;
+}
+
+.navItem:hover .badge {
+  background: rgba(var(--accent-primary-rgb), 0.15);
+  transform: scale(1.05);
+}
+
+.navItem.active .badge {
+  background: var(--accent-primary);
+  color: white;
+  box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.3);
+}
+
+.profileSection {
+  padding: 1rem;
+  border-top: 1px solid rgba(var(--border-color-rgb), 0.1);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.profileAvatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--text-primary);
+  border: 2px solid rgba(var(--accent-primary-rgb), 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.profileAvatar:hover {
+  border-color: rgba(var(--accent-primary-rgb), 0.4);
+  transform: scale(1.05);
+}
+
+.profileInfo {
+  flex: 1;
+  overflow: hidden;
+}
+
+.profileName {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.2rem;
+}
+
+.profileStatus {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+
+.logoutButton {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.logoutButton:hover {
+  background: rgba(var(--error-rgb, 239, 68, 68), 0.1);
+  color: var(--error, #ef4444);
+  transform: rotate(15deg);
+}
+
+/* Collapsed Sidebar */
+.collapsed {
+  width: 80px;
+}
+
+.collapsed .logoText,
+.collapsed .navText,
+.collapsed .profileInfo,
+.collapsed .badge {
+  display: none;
+}
+
+.collapsed .navItem {
+  justify-content: center;
+  padding: 0.75rem;
+}
+
+.collapsed .navIcon {
+  width: 24px;
+  height: 24px;
+}
+
+.collapsed .profileSection {
+  justify-content: center;
+}
+
+.collapsed .logoWrapper {
+  justify-content: center;
+  width: 100%;
+}
+
+.toggleButton {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  position: absolute;
+  right: -16px;
+  top: 6rem;
+  background: rgba(var(--bg-secondary-rgb), 0.9);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid rgba(var(--border-color-rgb), 0.1);
+  box-shadow: var(--shadow-sm);
+  z-index: 5;
+}
+
+.toggleButton:hover {
+  background: rgba(var(--accent-primary-rgb), 0.1);
+  color: var(--accent-primary);
+  transform: scale(1.1);
+}
+
+/* Enhanced light theme active states for better visibility */
+:global(.lightTheme) .navItem.active {
+  color: var(--accent-primary);
+  background: linear-gradient(135deg,
+    rgba(var(--accent-primary-rgb), 0.1),
+    rgba(var(--accent-secondary-rgb), 0.05)
+  );
+  border-color: rgba(var(--accent-primary-rgb), 0.2);
+  font-weight: 600;
+  box-shadow: 
+    0 4px 8px -2px rgba(var(--accent-primary-rgb), 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.02),
+    inset 0 1px 1px rgba(255, 255, 255, 0.8);
+}
+
+:global(.lightTheme) .navItem.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 60%;
+  background: linear-gradient(to bottom, var(--accent-primary), var(--accent-secondary));
+  border-radius: 0 4px 4px 0;
+  box-shadow: 2px 0 6px rgba(var(--accent-primary-rgb), 0.2);
+}
+
+:global(.lightTheme) .navItem.active .navIcon {
+  color: var(--accent-primary);
+  transform: scale(1.1);
+  filter: drop-shadow(0 1px 1px rgba(var(--accent-primary-rgb), 0.2));
+}
+
+:global(.lightTheme) .navItem.active .navText {
+  color: var(--accent-primary);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+:global(.lightTheme) .navItem.active .badge {
+  background: var(--accent-primary);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(var(--accent-primary-rgb), 0.2);
+}
+
+/* Enhanced dark theme active states for better visibility */
+:global(.darkTheme) .navItem.active {
+  color: var(--accent-primary);
+  background: rgba(var(--accent-primary-rgb), 0.15);
+  border-color: rgba(var(--accent-primary-rgb), 0.25);
+  font-weight: 600;
+  box-shadow: 
+    0 4px 8px -2px rgba(0, 0, 0, 0.15),
+    0 2px 4px -1px rgba(0, 0, 0, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+:global(.darkTheme) .navItem.active::before {
+  box-shadow: 2px 0 8px rgba(var(--accent-primary-rgb), 0.3);
+}
+
+:global(.darkTheme) .navItem.active .navText {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+} 

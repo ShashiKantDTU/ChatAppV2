@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+package-lock.json
+yarn.lock
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Testing
+coverage/
+.nyc_output/
+
+# User uploads and media
+uploads/*
+!uploads/.gitkeep
+
+# Misc
+.DS_Store
+.idea/
+.vscode/
+tmp/
+temp/
+
+# Local database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Debug files
+.debug
+debug.log
+debug.json
+
+# Session data
+sessions/ 
