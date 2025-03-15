@@ -85,28 +85,36 @@ const VoiceCall = ({
         }
     }, [socket, remoteUser, localUser]);
 
-    // WebRTC configuration
+    // Update the WebRTC configuration with more comprehensive STUN/TURN servers
     const configuration = {
         iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
+            // Google STUN servers
             {
-                urls: 'turn:openrelay.metered.ca:80',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
+                urls: [
+                    'stun:stun.l.google.com:19302',
+                    'stun:stun1.l.google.com:19302',
+                    'stun:stun2.l.google.com:19302',
+                    'stun:stun3.l.google.com:19302',
+                    'stun:stun4.l.google.com:19302'
+                ]
             },
+            // Free TURN servers from OpenRelay
             {
-                urls: 'turn:openrelay.metered.ca:443',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
-            },
-            {
-                urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                urls: [
+                    'turn:openrelay.metered.ca:80',
+                    'turn:openrelay.metered.ca:443',
+                    'turn:openrelay.metered.ca:443?transport=tcp',
+                    'turn:openrelay.metered.ca:80?transport=tcp'
+                ],
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
             }
         ],
-        iceCandidatePoolSize: 10
+        iceCandidatePoolSize: 10,
+        // Add these options for better NAT traversal
+        iceTransportPolicy: 'all',
+        rtcpMuxPolicy: 'require',
+        bundlePolicy: 'max-bundle'
     };
 
     useEffect(() => {
@@ -139,8 +147,8 @@ const VoiceCall = ({
             console.log('Audio permissions granted');
             localStreamRef.current = stream;
 
-            // Create peer connection
-            console.log('Creating peer connection');
+            // Create peer connection with enhanced debugging
+            console.log('Creating peer connection with config:', configuration);
             const peerConnection = new RTCPeerConnection(configuration);
             peerConnectionRef.current = peerConnection;
 
@@ -160,7 +168,7 @@ const VoiceCall = ({
                 }
             };
 
-            // Handle connection state changes
+            // Enhance the ICE connection state change handler
             peerConnection.oniceconnectionstatechange = () => {
                 const state = peerConnection.iceConnectionState;
                 console.log('ICE connection state changed:', state);
@@ -169,10 +177,27 @@ const VoiceCall = ({
                     console.log('Call connected successfully');
                     setCallStatus('ongoing');
                     startTimer();
-                } else if (state === 'failed' || state === 'disconnected') {
-                    console.log('Call connection failed');
-                    setError('Connection failed');
-                    cleanup();
+                } else if (state === 'failed') {
+                    console.error('ICE connection failed - likely a STUN/TURN server issue. Attempting to restart ICE...');
+                    try {
+                        peerConnection.restartIce();
+                    } catch (error) {
+                        console.error('Error restarting ICE:', error);
+                        setError('Connection failed');
+                        cleanup();
+                    }
+                } else if (state === 'disconnected') {
+                    console.warn('ICE connection disconnected - attempting to recover...');
+                    // Wait a few seconds to see if it reconnects naturally
+                    setTimeout(() => {
+                        if (peerConnection.iceConnectionState === 'disconnected') {
+                            try {
+                                peerConnection.restartIce();
+                            } catch (error) {
+                                console.error('Error restarting ICE:', error);
+                            }
+                        }
+                    }, 3000);
                 }
             };
 
@@ -186,15 +211,22 @@ const VoiceCall = ({
                 console.log('ICE gathering state:', peerConnection.iceGatheringState);
             };
 
-            // Add connection state change logging
+            // Enhance the connection state change handler
             peerConnection.onconnectionstatechange = () => {
                 console.log('Connection state:', peerConnection.connectionState);
                 if (peerConnection.connectionState === 'connected') {
                     console.log('WebRTC connection established successfully');
+                    setCallStatus('ongoing');
+                    startTimer();
                 } else if (peerConnection.connectionState === 'failed') {
-                    console.log('WebRTC connection failed');
-                    setError('Connection failed');
-                    cleanup();
+                    console.error('WebRTC connection failed - attempting to restart');
+                    try {
+                        peerConnection.restartIce();
+                    } catch (error) {
+                        console.error('Error restarting connection:', error);
+                        setError('Connection failed');
+                        cleanup();
+                    }
                 }
             };
 
@@ -221,14 +253,21 @@ const VoiceCall = ({
                 });
             }
 
-            // Handle ICE candidates
+            // Enhance the ICE candidate handler
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate && socket) {
-                    console.log('Generated ICE candidate');
+                    console.log('Generated ICE candidate:', {
+                        type: event.candidate.type,
+                        protocol: event.candidate.protocol,
+                        address: event.candidate.address,
+                        candidateType: event.candidate.candidateType
+                    });
                     socket.emit('ice-candidate', {
                         candidate: event.candidate,
                         to: remoteUser.uid
                     });
+                } else if (!event.candidate) {
+                    console.log('ICE candidate generation complete');
                 }
             };
 

@@ -616,28 +616,38 @@ io.on('connection', (socket) => {
             }
             
             const calledUser = await User.findOne({ uid: userToCall });
-            if (!calledUser || !calledUser.socketid) {
-                throw new Error('User is not available');
+            if (!calledUser) {
+                throw new Error('User not found');
+            }
+            
+            if (!calledUser.socketid) {
+                throw new Error('User is offline');
             }
 
             console.log('Sending incoming call to:', calledUser.socketid);
             
-            // Always ensure the offer has the correct type
+            // Ensure the offer has type and SDP fields
             const formattedOffer = {
                 type: 'offer',
                 sdp: offer.sdp
             };
 
-            console.log('Sending formatted offer:', formattedOffer);
-            
+            // Send the call to the recipient
             io.to(calledUser.socketid).emit('incoming-call', {
                 from,
                 offer: formattedOffer
             });
+
+            // Send confirmation to caller
+            socket.emit('call-initiated', { 
+                to: userToCall,
+                status: 'ringing'
+            });
         } catch (error) {
             console.error('Error in call-user handler:', error);
             socket.emit('call-failed', { 
-                error: error.message
+                error: error.message,
+                details: 'Failed to initiate call'
             });
         }
     });
@@ -658,41 +668,75 @@ io.on('connection', (socket) => {
             }
 
             const callingUser = await User.findOne({ uid: to });
-            if (!callingUser || !callingUser.socketid) {
-                throw new Error('Calling user not available');
+            if (!callingUser) {
+                throw new Error('Calling user not found');
+            }
+            
+            if (!callingUser.socketid) {
+                throw new Error('Calling user is offline');
             }
 
             console.log('Sending answer to caller:', callingUser.socketid);
             
-            // Always ensure the answer has the correct type
+            // Ensure the answer has the correct type
             const formattedAnswer = {
                 type: 'answer',
                 sdp: answer.sdp
             };
 
-            console.log('Sending formatted answer:', formattedAnswer);
+            console.log('Sending formatted answer');
             
             io.to(callingUser.socketid).emit('call-answered', {
                 answer: formattedAnswer
             });
+
+            // Send confirmation to the answerer
+            socket.emit('answer-sent', {
+                to: to,
+                status: 'connecting'
+            });
         } catch (error) {
             console.error('Error in call-answered handler:', error);
             socket.emit('call-failed', {
-                error: error.message
+                error: error.message,
+                details: 'Failed to send answer'
             });
         }
     });
 
     socket.on('ice-candidate', async ({ to, candidate }) => {
         try {
-            const user = await User.findOne({ uid: to });
-            if (user && user.socketid) {
-                io.to(user.socketid).emit('ice-candidate', {
-                    candidate
-                });
+            if (!candidate) {
+                console.log('Empty ICE candidate received, ignoring');
+                return;
             }
+
+            console.log('ICE candidate received for', to, {
+                type: candidate.type,
+                protocol: candidate.protocol || 'unknown'
+            });
+
+            const targetUser = await User.findOne({ uid: to });
+            if (!targetUser) {
+                console.error('Target user not found for ICE candidate');
+                return;
+            }
+            
+            if (!targetUser.socketid) {
+                console.error('Target user is offline');
+                return;
+            }
+
+            console.log('Forwarding ICE candidate to:', targetUser.socketid);
+            io.to(targetUser.socketid).emit('ice-candidate', {
+                candidate
+            });
         } catch (error) {
             console.error('Error in ice-candidate handler:', error);
+            socket.emit('call-failed', {
+                error: 'ICE candidate relay failed',
+                details: error.message
+            });
         }
     });
 
@@ -700,7 +744,10 @@ io.on('connection', (socket) => {
         try {
             const user = await User.findOne({ uid: to });
             if (user && user.socketid) {
+                console.log('Ending call for user:', user.socketid);
                 io.to(user.socketid).emit('call-ended');
+            } else {
+                console.log('Could not end call - user not found or offline');
             }
         } catch (error) {
             console.error('Error in end-call handler:', error);
