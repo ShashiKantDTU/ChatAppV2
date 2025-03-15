@@ -20,7 +20,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "http://localhost:3000/auth/google/callback"
+    callbackURL: `${process.env.NODE_ENV === 'production' ? process.env.BACKEND_URL || 'https://chatappv2-qa96.onrender.com' : 'http://localhost:3000'}/auth/google/callback`
 }, async (accessToken, refreshToken, profile, done) => {
     
     const user = { id: profile.id, email: profile.emails[0].value, name: profile.displayName };
@@ -34,7 +34,7 @@ router.get('/auth/google',
 
 // ✅ Google OAuth Callback
 router.get('/auth/google/callback', 
-    passport.authenticate('google', { failureRedirect: 'http://localhost:5173/login',session: false }),
+    passport.authenticate('google', { failureRedirect: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login`, session: false }),
     async (req, res) => {
         const user = req.user;
         const email = user.email;
@@ -47,8 +47,8 @@ router.get('/auth/google/callback',
         // ✅ Store JWT token in HTTP-only cookie
         res.cookie('token', token, {
             httpOnly: true,
-            secure: false,  // ✅ Change to `true` in production with HTTPS
-            sameSite: 'lax'
+            secure: process.env.NODE_ENV === 'production', // ✅ True in production with HTTPS
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
         });
         res.user = token;
         // check if user already exists
@@ -76,7 +76,7 @@ router.get('/auth/google/callback',
 
 
         // ✅ Redirect to frontend
-        res.redirect('http://localhost:5173/');
+        res.redirect(process.env.CLIENT_URL || 'http://localhost:5173');
     }
 );
 
