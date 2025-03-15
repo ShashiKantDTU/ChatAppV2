@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
         enum: ['user', 'admin'],
         default: 'user'
     },
-    gooleId: {
+    googleId: {
         type: String,
     },
     socketid: {

@@ -1,28 +1,33 @@
-import React, { useContext } from 'react';
-import { AuthContext } from './authcontext/authcontext';
+import { useContext, useEffect } from "react";
+import { AuthContext } from "./authcontext/authcontext";
+import { useNavigate } from "react-router-dom";
 
 const Logout = () => {
-    const { setUser } = useContext(AuthContext);
+    const { logout } = useContext(AuthContext);
+    const navigate = useNavigate();
 
-    const handleLogout = async () => {
-        try {
-            const response = await fetch('http://localhost:3000/logout', {
-                method: 'POST',  // ✅ Logout should be a POST request
-                credentials: 'include', // ✅ Ensures cookies are sent with the request
-            });
-
-            if (!response.ok) {
-                throw new Error("Logout failed");
+    useEffect(() => {
+        const performLogout = async () => {
+            try {
+                // Call the logout function from context
+                await logout();
+                
+                // Navigate to login page
+                navigate('/login');
+            } catch (error) {
+                console.error('Error during logout:', error);
+                navigate('/login');
             }
+        };
 
-            setUser(null);  // ✅ Clears user state after successful logout
-            console.log("User logged out successfully");
-        } catch (error) {
-            console.error("Logout error:", error);
-        }
-    };
+        performLogout();
+    }, [logout, navigate]);
 
-    return <button onClick={handleLogout}>Logout</button>;
+    return (
+        <div className="loading-screen">
+            <p>Logging out...</p>
+        </div>
+    );
 };
 
-export default Logout;
+export default Logout; 
