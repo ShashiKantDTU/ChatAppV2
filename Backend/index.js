@@ -35,82 +35,6 @@ app.use(cookie());
 // Add session support for OAuth state
 app.use(configureSession());
 
-// Log all incoming request headers for debugging
-app.use((req, res, next) => {
-    console.log('=== REQUEST DEBUG ===');
-    console.log('Request URL:', req.originalUrl);
-    console.log('Request headers:', {
-        cookie: req.headers.cookie,
-        origin: req.headers.origin,
-        host: req.headers.host,
-        referer: req.headers.referer,
-        'content-type': req.headers['content-type']
-    });
-    next();
-});
-
-// Enable CORS for specific choices
-app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: true,
-    optionsSuccessStatus: 200,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
-
-// Additional CORS headers for preflight requests
-app.use((req, res, next) => {
-    // Important: This must match the origin for cookie purposes
-    res.header('Access-Control-Allow-Origin', process.env.CLIENT_URL || 'http://localhost:5173');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    
-    // Handle preflight requests
-    if (req.method === 'OPTIONS') {
-        return res.status(200).send();
-    }
-    
-    next();
-});
-
-// IMPORTANT: Only parse JSON for requests with the appropriate content-type
-app.use((req, res, next) => {
-    const contentType = req.headers['content-type'] || '';
-    
-    // Check for upload routes or multipart content type
-    if (req.originalUrl === '/upload' || 
-        req.originalUrl === '/upload-audio' || 
-        contentType.includes('multipart/form-data')) {
-        console.log('⚠️ Bypassing JSON parser for multipart request');
-        return next();
-    }
-    
-    // Apply JSON parsing only for JSON content type
-    if (contentType.includes('application/json')) {
-        console.log('✅ Applying JSON parser');
-        express.json()(req, res, next);
-    } else {
-        // For other content types, use a url-encoded parser or just pass through
-        console.log('🔄 Using URL-encoded parser or passing through');
-        express.urlencoded({ extended: true })(req, res, next);
-    }
-});
-
-// Set explicit routes for file uploads BEFORE the router middleware
-app.post('/upload', (req, res, next) => {
-    console.log('📂 Upload route hit');
-    next();
-});
-
-app.post('/upload-audio', (req, res, next) => {
-    console.log('🎵 Audio upload route hit');
-    next();
-});
-
-// Middleware for routes
-app.use(router);
-
 // Configure Cloudinary
 const cloudinaryConfig = {
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -192,90 +116,188 @@ const upload = multer({
     }
 });
 
-// File upload endpoint
-app.post('/upload', upload.array('file', 10), (req, res) => {
-    try {
-        console.log('Upload request received');
-        
-        if (!req.files || req.files.length === 0) {
-            console.error('No files in request');
-            throw new Error('No files uploaded');
-        }
-
-        console.log(`Processing ${req.files.length} uploaded files`);
-        
-        // Handle multiple files
-        const files = req.files.map(file => {
-            console.log('File details:', {
-                path: file.path,
-                filename: file.originalname,
-                size: file.size,
-                mimetype: file.mimetype,
-                cloudinaryId: file.public_id || file.filename
-            });
-            
-            return {
-                url: file.path, // Cloudinary returns the URL in the path property
-                filename: file.originalname,
-                size: file.size,
-                mimeType: file.mimetype,
-                public_id: file.public_id || file.filename // Store Cloudinary's public_id for potential deletion later
-            };
-        });
-
-        console.log('Sending response with file details');
-        res.json({
-            success: true,
-            files: files
-        });
-    } catch (error) {
-        console.error('Upload error details:', error);
-        // Check if this is a Multer error
-        if (error.name === 'MulterError') {
-            console.error('Multer error type:', error.code);
-            return res.status(400).json({
-                success: false,
-                error: `File upload error: ${error.message}`,
-                code: error.code
-            });
-        }
-        
-        // Check if this is a Cloudinary error
-        if (error.http_code) {
-            console.error('Cloudinary error:', error);
-            return res.status(error.http_code).json({
-                success: false,
-                error: `Cloudinary error: ${error.message}`
-            });
-        }
-        
-        res.status(400).json({
-            success: false,
-            error: error.message || 'Unknown upload error'
-        });
-    }
-});
-
-// Add a middleware to catch multer errors
-app.use((err, req, res, next) => {
-    if (err instanceof multer.MulterError) {
-        console.error('Multer error caught in middleware:', err);
-        return res.status(400).json({
-            success: false,
-            error: `File upload error: ${err.message}`,
-            code: err.code
-        });
-    } else if (err) {
-        console.error('Non-multer error caught in middleware:', err);
-        return res.status(500).json({
-            success: false,
-            error: err.message || 'Unknown server error'
-        });
-    }
+// Log all incoming request headers for debugging
+app.use((req, res, next) => {
+    console.log('=== REQUEST DEBUG ===');
+    console.log('Request URL:', req.originalUrl);
+    console.log('Request headers:', {
+        cookie: req.headers.cookie,
+        origin: req.headers.origin,
+        host: req.headers.host,
+        referer: req.headers.referer,
+        'content-type': req.headers['content-type']
+    });
     next();
 });
 
-// Test endpoint to verify Cloudinary configuration
+// Enable CORS for specific choices
+app.use(cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    optionsSuccessStatus: 200,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// Additional CORS headers for preflight requests
+app.use((req, res, next) => {
+    // Important: This must match the origin for cookie purposes
+    res.header('Access-Control-Allow-Origin', process.env.CLIENT_URL || 'http://localhost:5173');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        return res.status(200).send();
+    }
+    
+    next();
+});
+
+// CRITICAL: Set up file upload routes BEFORE JSON parser middleware
+// File upload endpoint - Needs to be BEFORE express.json middleware
+app.post('/upload', (req, res) => {
+    console.log('📁 Upload route accessed');
+    upload.array('file', 10)(req, res, (err) => {
+        if (err) {
+            console.error('❌ Upload error:', err);
+            if (err instanceof multer.MulterError) {
+                return res.status(400).json({
+                    success: false,
+                    error: `File upload error: ${err.message}`,
+                    code: err.code
+                });
+            } else {
+                return res.status(500).json({
+                    success: false,
+                    error: err.message || 'Unknown upload error'
+                });
+            }
+        }
+        
+        try {
+            console.log('✅ Upload successful');
+            
+            if (!req.files || req.files.length === 0) {
+                console.error('⚠️ No files in request');
+                throw new Error('No files uploaded');
+            }
+
+            console.log(`📄 Processing ${req.files.length} uploaded files`);
+            
+            // Handle multiple files
+            const files = req.files.map(file => {
+                console.log('File details:', {
+                    path: file.path,
+                    filename: file.originalname,
+                    size: file.size,
+                    mimetype: file.mimetype,
+                    cloudinaryId: file.public_id || file.filename
+                });
+                
+                return {
+                    url: file.path, // Cloudinary returns the URL in the path property
+                    filename: file.originalname,
+                    size: file.size,
+                    mimeType: file.mimetype,
+                    public_id: file.public_id || file.filename // Store Cloudinary's public_id for potential deletion later
+                };
+            });
+
+            console.log('📤 Sending response with file details');
+            res.json({
+                success: true,
+                files: files
+            });
+        } catch (error) {
+            console.error('❌ Error processing upload:', error);
+            
+            // Check if this is a Cloudinary error
+            if (error.http_code) {
+                console.error('Cloudinary error:', error);
+                return res.status(error.http_code).json({
+                    success: false,
+                    error: `Cloudinary error: ${error.message}`
+                });
+            }
+            
+            res.status(400).json({
+                success: false,
+                error: error.message || 'Unknown upload error'
+            });
+        }
+    });
+});
+
+// Audio recording upload endpoint - Needs to be BEFORE express.json middleware
+app.post('/upload-audio', (req, res) => {
+    console.log('🎵 Audio upload route accessed');
+    upload.single('audio')(req, res, (err) => {
+        if (err) {
+            console.error('❌ Audio upload error:', err);
+            if (err instanceof multer.MulterError) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Audio upload error: ${err.message}`,
+                    code: err.code
+                });
+            } else {
+                return res.status(500).json({
+                    success: false,
+                    error: err.message || 'Unknown audio upload error'
+                });
+            }
+        }
+        
+        try {
+            console.log('✅ Audio upload successful');
+            
+            if (!req.file) {
+                console.error('⚠️ No audio file in request');
+                throw new Error('No audio file uploaded');
+            }
+
+            console.log('🎵 Audio file details:', {
+                path: req.file.path,
+                filename: req.file.originalname || 'voice-message.webm',
+                size: req.file.size,
+                mimetype: req.file.mimetype,
+                cloudinaryId: req.file.public_id || req.file.filename
+            });
+
+            // Return the Cloudinary URL and file details
+            res.json({
+                success: true,
+                file: {
+                    url: req.file.path,
+                    filename: req.file.originalname || 'voice-message.webm',
+                    size: req.file.size,
+                    mimeType: req.file.mimetype,
+                    public_id: req.file.public_id || req.file.filename
+                }
+            });
+        } catch (error) {
+            console.error('❌ Error processing audio upload:', error);
+            
+            // Check if this is a Cloudinary error
+            if (error.http_code) {
+                console.error('Cloudinary error:', error);
+                return res.status(error.http_code).json({
+                    success: false,
+                    error: `Cloudinary error: ${error.message}`
+                });
+            }
+            
+            res.status(400).json({
+                success: false,
+                error: error.message || 'Unknown audio upload error'
+            });
+        }
+    });
+});
+
+// Test endpoint to verify Cloudinary configuration - Needs to be BEFORE express.json middleware
 app.get('/cloudinary-status', (req, res) => {
     try {
         const status = {
@@ -301,7 +323,7 @@ app.get('/cloudinary-status', (req, res) => {
     }
 });
 
-// Simple test route for file upload form
+// Simple test route for file upload form - Needs to be BEFORE express.json middleware
 app.get('/upload-test', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -355,6 +377,20 @@ app.get('/upload-test', (req, res) => {
     `);
 });
 
+// NOW apply JSON parser for all other routes
+app.use((req, res, next) => {
+    const contentType = req.headers['content-type'] || '';
+    
+    if (contentType.includes('application/json')) {
+        console.log('✅ Applying JSON parser');
+        express.json()(req, res, next);
+    } else {
+        // For other content types, use a url-encoded parser or just pass through
+        console.log('🔄 Using URL-encoded parser or passing through');
+        express.urlencoded({ extended: true })(req, res, next);
+    }
+});
+
 // File deletion endpoint for Cloudinary
 app.delete('/delete-file', async (req, res) => {
     try {
@@ -387,62 +423,26 @@ app.delete('/delete-file', async (req, res) => {
     }
 });
 
-// Audio recording upload endpoint
-app.post('/upload-audio', upload.single('audio'), (req, res) => {
-    try {
-        console.log('Audio upload request received');
-        
-        if (!req.file) {
-            console.error('No audio file in request');
-            throw new Error('No audio file uploaded');
-        }
+// Middleware for routes AFTER file upload endpoints
+app.use(router);
 
-        console.log('Audio file details:', {
-            path: req.file.path,
-            filename: req.file.originalname || 'voice-message.webm',
-            size: req.file.size,
-            mimetype: req.file.mimetype,
-            cloudinaryId: req.file.public_id || req.file.filename
-        });
-
-        // Return the Cloudinary URL and file details
-        res.json({
-            success: true,
-            file: {
-                url: req.file.path,
-                filename: req.file.originalname || 'voice-message.webm',
-                size: req.file.size,
-                mimeType: req.file.mimetype,
-                public_id: req.file.public_id || req.file.filename
-            }
-        });
-    } catch (error) {
-        console.error('Audio upload error details:', error);
-        
-        // Check if this is a Multer error
-        if (error.name === 'MulterError') {
-            console.error('Multer error type:', error.code);
-            return res.status(400).json({
-                success: false,
-                error: `Audio upload error: ${error.message}`,
-                code: error.code
-            });
-        }
-        
-        // Check if this is a Cloudinary error
-        if (error.http_code) {
-            console.error('Cloudinary error:', error);
-            return res.status(error.http_code).json({
-                success: false,
-                error: `Cloudinary error: ${error.message}`
-            });
-        }
-        
-        res.status(400).json({
+// Add a middleware to catch multer errors
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        console.error('Multer error caught in middleware:', err);
+        return res.status(400).json({
             success: false,
-            error: error.message || 'Unknown audio upload error'
+            error: `File upload error: ${err.message}`,
+            code: err.code
+        });
+    } else if (err) {
+        console.error('Non-multer error caught in middleware:', err);
+        return res.status(500).json({
+            success: false,
+            error: err.message || 'Unknown server error'
         });
     }
+    next();
 });
 
 // Socket.io connection handling
