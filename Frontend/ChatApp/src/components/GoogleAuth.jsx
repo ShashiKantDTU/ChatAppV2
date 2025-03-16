@@ -21,17 +21,14 @@ const GoogleAuth = ({ isDisabled = false, loginCallback = null }) => {
       console.log('Token received from URL, storing in localStorage');
       localStorage.setItem('auth_token', tokenFromUrl);
       
-      // Clean up URL
-      const newUrl = window.location.pathname;
+      // Clean up URL - but preserve auth_source for state management
+      const newUrl = window.location.pathname + '?auth_source=google';
       window.history.replaceState({}, document.title, newUrl);
       
-      // Try to use the token
-      if (loginCallback) {
-        // Here we can use a minimal payload since a proper /me call will happen later
-        loginCallback({ tokenFound: true });
-      }
+      // Try to use the token immediately
+      checkAuthStatus();
     }
-    // If we just returned from Google OAuth flow
+    // If we just returned from Google OAuth flow but no token in URL
     else if (authSource === 'google') {
       console.log('Returned from Google Auth, checking authentication...');
       // Clean up URL
@@ -48,15 +45,21 @@ const GoogleAuth = ({ isDisabled = false, loginCallback = null }) => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
       const token = localStorage.getItem('auth_token');
+      
+      console.log('Checking auth with token from localStorage:', token ? 'Token exists' : 'No token');
+      
+      if (!token) {
+        console.log('No token found in localStorage to use for authentication');
+        return;
+      }
+      
       const headers = {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       };
       
-      // If we have a token in localStorage, add it to the headers
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      console.log('Making request to /me with Authorization header');
       
       const response = await fetch(`${API_URL}/me`, {
         method: 'GET',
@@ -64,17 +67,24 @@ const GoogleAuth = ({ isDisabled = false, loginCallback = null }) => {
         headers: headers
       });
       
-      console.log('Auth check response:', response);
+      console.log('Auth check response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Auth data:', data);
+        console.log('Auth success! User data:', data);
         
         if (data.user && loginCallback) {
+          console.log('Calling login callback with user data');
           loginCallback(data.user);
         }
       } else {
-        console.log('Authentication check failed');
+        console.log('Authentication check failed, status:', response.status);
+        try {
+          const errorData = await response.json();
+          console.log('Error response:', errorData);
+        } catch (e) {
+          console.log('No JSON error response');
+        }
       }
     } catch (error) {
       console.error('Error checking authentication:', error);
@@ -84,9 +94,14 @@ const GoogleAuth = ({ isDisabled = false, loginCallback = null }) => {
   const handleGoogleLogin = () => {
     setIsLoading(true);
     
-    // Create the return URL with a special parameter to detect return from auth
-    const currentUrl = window.location.href.split('?')[0]; // Remove any existing query params
-    const returnUrl = `${currentUrl}?auth_source=google`;
+    // Get the current origin (domain) for return URL
+    const origin = window.location.origin;
+    // Use current path (whether login or signup) for return
+    const path = window.location.pathname;
+    // Create a clean return URL
+    const returnUrl = `${origin}${path}?auth_source=google`;
+    
+    console.log('Constructed return URL:', returnUrl);
     
     // Store the return URL in sessionStorage
     sessionStorage.setItem('auth_return_url', returnUrl);

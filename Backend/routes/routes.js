@@ -79,7 +79,7 @@ router.get('/auth/google/callback',
             sameSite: 'none',
             secure: true,
             path: '/',
-            domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : 'localhost',
+            // Don't set domain to allow the browser to use the current domain
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
         });
         
@@ -89,7 +89,6 @@ router.get('/auth/google/callback',
             sameSite: 'none',
             secure: true,
             path: '/',
-            domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : 'localhost',
             maxAge: '7 days'
         });
         
@@ -99,7 +98,6 @@ router.get('/auth/google/callback',
             sameSite: 'none',
             secure: true,
             path: '/',
-            domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : 'localhost',
             maxAge: 60000 // 1 minute
         });
         
@@ -138,8 +136,31 @@ router.get('/auth/google/callback',
             ? `${returnUrl}&token=${encodeURIComponent(token)}` 
             : `${returnUrl}?token=${encodeURIComponent(token)}`;
             
-        console.log(`Redirecting to: ${redirectUrlWithToken}`);
-        res.redirect(redirectUrlWithToken);
+        // As a fallback, set the token in localStorage directly
+        // Create a simple HTML page that sets localStorage and redirects
+        const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Authenticating...</title>
+            <script>
+              // Store the token in localStorage
+              localStorage.setItem("auth_token", "${token}");
+              console.log("Token set in localStorage by auth page");
+              
+              // Redirect to the app
+              window.location.href = "${returnUrl}";
+            </script>
+          </head>
+          <body>
+            <p>Authenticating, please wait...</p>
+          </body>
+        </html>
+        `;
+            
+        console.log(`Sending authentication page with localStorage fallback`);
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(html);
     }
 );
 
@@ -159,13 +180,11 @@ router.get('/',verifyJWT)
 router.post('/signup', register)
 router.post('/login', login)
 router.post("/logout", (req, res) => {
-    const isProduction = process.env.NODE_ENV === 'production';
     res.clearCookie("token", { 
         httpOnly: true, 
         sameSite: 'none',
         secure: true,
-        path: '/',
-        domain: isProduction ? '.onrender.com' : 'localhost',
+        path: '/'
     });
     res.status(200).json({ message: "Logged out successfully" });
 });

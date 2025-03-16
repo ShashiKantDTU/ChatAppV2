@@ -138,7 +138,6 @@ const login = async (req, res, next) => {
             req.user = token;
             
             // Set consistent cookie settings across all auth endpoints
-            const isProduction = process.env.NODE_ENV === 'production';
             res.cookie('token', token, {
                 httpOnly: true,
                 sameSite: 'none',
@@ -156,7 +155,11 @@ const login = async (req, res, next) => {
                 maxAge: '7 days'
             });
 
-            res.status(201).json({ message: 'User Loggedin successfully' });
+            // Also send token in response body for client-side storage
+            res.status(201).json({ 
+                message: 'User Loggedin successfully', 
+                token: token 
+            });
             console.log('hashpass', correctpass)
             next()
         }
