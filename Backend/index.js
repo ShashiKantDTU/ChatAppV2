@@ -44,6 +44,13 @@ app.use((req, res, next) => {
         host: req.headers.host,
         referer: req.headers.referer
     });
+    
+    // Check if it's a file upload request
+    if (req.originalUrl === '/upload' || req.originalUrl === '/upload-audio') {
+        console.log('File upload request detected, bypassing JSON parser');
+        return next();
+    }
+    
     next();
 });
 
@@ -72,19 +79,20 @@ app.use((req, res, next) => {
     next();
 });
 
+// Apply JSON parser middleware ONLY to non-upload routes
+app.use((req, res, next) => {
+    // Skip JSON parsing for upload routes
+    if (req.originalUrl === '/upload' || req.originalUrl === '/upload-audio') {
+        console.log('Skipping JSON parsing for upload route');
+        return next();
+    }
+    
+    // Apply JSON parsing for all other routes
+    express.json()(req, res, next);
+});
+
 // Middleware for routes
 app.use(router);
-
-// Add a specific route for file uploads that bypasses the JSON parser
-app.post('/upload', (req, res, next) => {
-    console.log('Upload route hit, bypassing JSON parser');
-    next();
-});
-
-app.post('/upload-audio', (req, res, next) => {
-    console.log('Audio upload route hit, bypassing JSON parser');
-    next();
-});
 
 // Configure Cloudinary
 const cloudinaryConfig = {
