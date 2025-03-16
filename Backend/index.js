@@ -76,26 +76,31 @@ app.use((req, res, next) => {
 app.use(router);
 
 // Configure Cloudinary
-cloudinary.config({
+const cloudinaryConfig = {
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET
-});
+};
 
-// Configure Cloudinary storage for multer
+// Validate Cloudinary configuration
+if (!cloudinaryConfig.cloud_name || !cloudinaryConfig.api_key || !cloudinaryConfig.api_secret) {
+    console.error('⚠️ WARNING: Missing Cloudinary credentials in environment variables!');
+    console.error('File uploads will fail. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET');
+} else {
+    console.log('✅ Cloudinary configuration found');
+}
+
+// Configure Cloudinary with the validated config
+cloudinary.config(cloudinaryConfig);
+
+// Configure Cloudinary storage for multer with error handling
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
         folder: 'chat-app-uploads',
         resource_type: 'auto',
-        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff', 
-                         'mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv',
-                         'mp3', 'wav', 'ogg', 'midi', 'aac', 'flac',
-                         'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-                         'zip', 'rar', '7z', 'tar',
-                         'txt', 'csv', 'html', 'css', 'js',
-                         'json', 'xml', 'yaml', 'py',
-                         'ttf', 'otf', 'woff', 'woff2'],
+        // Remove allowed_formats to let Cloudinary handle all formats
+        // This is more reliable than specifying them manually
     }
 });
 
@@ -140,28 +145,108 @@ const upload = multer({
 // File upload endpoint
 app.post('/upload', upload.array('file', 10), (req, res) => {
     try {
+        console.log('Upload request received');
+        
         if (!req.files || req.files.length === 0) {
+            console.error('No files in request');
             throw new Error('No files uploaded');
         }
 
+        console.log(`Processing ${req.files.length} uploaded files`);
+        
         // Handle multiple files
-        const files = req.files.map(file => ({
-            url: file.path, // Cloudinary returns the URL in the path property
-            filename: file.originalname,
-            size: file.size,
-            mimeType: file.mimetype,
-            public_id: file.filename // Store Cloudinary's public_id for potential deletion later
-        }));
+        const files = req.files.map(file => {
+            console.log('File details:', {
+                path: file.path,
+                filename: file.originalname,
+                size: file.size,
+                mimetype: file.mimetype,
+                cloudinaryId: file.filename
+            });
+            
+            return {
+                url: file.path, // Cloudinary returns the URL in the path property
+                filename: file.originalname,
+                size: file.size,
+                mimeType: file.mimetype,
+                public_id: file.filename // Store Cloudinary's public_id for potential deletion later
+            };
+        });
 
+        console.log('Sending response with file details');
         res.json({
             success: true,
             files: files
         });
     } catch (error) {
-        console.error('Upload error:', error);
+        console.error('Upload error details:', error);
+        // Check if this is a Multer error
+        if (error.name === 'MulterError') {
+            console.error('Multer error type:', error.code);
+            return res.status(400).json({
+                success: false,
+                error: `File upload error: ${error.message}`,
+                code: error.code
+            });
+        }
+        
+        // Check if this is a Cloudinary error
+        if (error.http_code) {
+            console.error('Cloudinary error:', error);
+            return res.status(error.http_code).json({
+                success: false,
+                error: `Cloudinary error: ${error.message}`
+            });
+        }
+        
         res.status(400).json({
             success: false,
-            error: error.message
+            error: error.message || 'Unknown upload error'
+        });
+    }
+});
+
+// Add a middleware to catch multer errors
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        console.error('Multer error caught in middleware:', err);
+        return res.status(400).json({
+            success: false,
+            error: `File upload error: ${err.message}`,
+            code: err.code
+        });
+    } else if (err) {
+        console.error('Non-multer error caught in middleware:', err);
+        return res.status(500).json({
+            success: false,
+            error: err.message || 'Unknown server error'
+        });
+    }
+    next();
+});
+
+// Test endpoint to verify Cloudinary configuration
+app.get('/cloudinary-status', (req, res) => {
+    try {
+        const status = {
+            configured: !!(process.env.CLOUDINARY_CLOUD_NAME && 
+                          process.env.CLOUDINARY_API_KEY && 
+                          process.env.CLOUDINARY_API_SECRET),
+            cloudName: process.env.CLOUDINARY_CLOUD_NAME ? 
+                      process.env.CLOUDINARY_CLOUD_NAME : 'Not configured',
+            apiKeyConfigured: !!process.env.CLOUDINARY_API_KEY,
+            apiSecretConfigured: !!process.env.CLOUDINARY_API_SECRET
+        };
+        
+        res.json({
+            success: true,
+            status: status
+        });
+    } catch (error) {
+        console.error('Error checking Cloudinary status:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to check Cloudinary configuration'
         });
     }
 });
@@ -201,9 +286,20 @@ app.delete('/delete-file', async (req, res) => {
 // Audio recording upload endpoint
 app.post('/upload-audio', upload.single('audio'), (req, res) => {
     try {
+        console.log('Audio upload request received');
+        
         if (!req.file) {
+            console.error('No audio file in request');
             throw new Error('No audio file uploaded');
         }
+
+        console.log('Audio file details:', {
+            path: req.file.path,
+            filename: req.file.originalname || 'voice-message.webm',
+            size: req.file.size,
+            mimetype: req.file.mimetype,
+            cloudinaryId: req.file.filename
+        });
 
         // Return the Cloudinary URL and file details
         res.json({
@@ -217,10 +313,30 @@ app.post('/upload-audio', upload.single('audio'), (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Audio upload error:', error);
+        console.error('Audio upload error details:', error);
+        
+        // Check if this is a Multer error
+        if (error.name === 'MulterError') {
+            console.error('Multer error type:', error.code);
+            return res.status(400).json({
+                success: false,
+                error: `Audio upload error: ${error.message}`,
+                code: error.code
+            });
+        }
+        
+        // Check if this is a Cloudinary error
+        if (error.http_code) {
+            console.error('Cloudinary error:', error);
+            return res.status(error.http_code).json({
+                success: false,
+                error: `Cloudinary error: ${error.message}`
+            });
+        }
+        
         res.status(400).json({
             success: false,
-            error: error.message
+            error: error.message || 'Unknown audio upload error'
         });
     }
 });

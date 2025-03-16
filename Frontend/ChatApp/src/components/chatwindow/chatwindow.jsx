@@ -313,13 +313,30 @@ const ChatWindow = (props) => {
             });
 
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+            console.log(`Uploading to: ${API_URL}/upload`);
+            
             const response = await fetch(`${API_URL}/upload`, {
                 method: 'POST',
                 body: formData
             });
 
+            // Log the response status and headers for debugging
+            console.log(`Upload response status: ${response.status}`);
+            console.log(`Upload response status text: ${response.statusText}`);
+            
+            // Try to get the response text for error cases
             if (!response.ok) {
-                throw new Error('Upload failed');
+                const errorText = await response.text();
+                console.error('Error response from server:', errorText);
+                
+                try {
+                    // Try to parse as JSON if possible
+                    const errorJson = JSON.parse(errorText);
+                    throw new Error(errorJson.error || 'Upload failed');
+                } catch (parseError) {
+                    // If parsing fails, use the raw text
+                    throw new Error(`Upload failed: ${errorText || response.statusText}`);
+                }
             }
 
             const data = await response.json();
@@ -708,13 +725,30 @@ const ChatWindow = (props) => {
             formData.append('audio', audioBlob, 'audio.webm');
 
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+            console.log(`Uploading audio to: ${API_URL}/upload-audio`);
+            
             const response = await fetch(`${API_URL}/upload-audio`, {
                 method: 'POST',
                 body: formData
             });
 
+            // Log the response status and headers for debugging
+            console.log(`Audio upload response status: ${response.status}`);
+            console.log(`Audio upload response status text: ${response.statusText}`);
+            
+            // Try to get the response text for error cases
             if (!response.ok) {
-                throw new Error('Upload failed');
+                const errorText = await response.text();
+                console.error('Error response from server:', errorText);
+                
+                try {
+                    // Try to parse as JSON if possible
+                    const errorJson = JSON.parse(errorText);
+                    throw new Error(errorJson.error || 'Audio upload failed');
+                } catch (parseError) {
+                    // If parsing fails, use the raw text
+                    throw new Error(`Audio upload failed: ${errorText || response.statusText}`);
+                }
             }
 
             const data = await response.json();
