@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import Authloading from "../Loading/Authloading";
 
 
 export const AuthContext = createContext(null);
@@ -85,7 +86,7 @@ const AuthProvider = ({ children }) => {
 
     // 🔹 Show loading screen while checking auth
     if (loading) {
-        return <div className="loading-screen">Loading...</div>;
+        return <Authloading/>;
     }
 
     return (
