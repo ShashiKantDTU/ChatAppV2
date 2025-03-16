@@ -44,7 +44,7 @@ router.get('/auth/google/callback',
         const email = user.email;
         const name = user.name;
 
-
+        console.log('genrating JWT token for user ', user)
         // ✅ Generate JWT token
         const token = jwt.sign({ email:user.email, name: user.displayName }, process.env.JWT_SECRET);
 
