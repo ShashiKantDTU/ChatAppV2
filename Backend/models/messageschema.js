@@ -6,28 +6,18 @@ const ReactionSchema = new mongoose.Schema({
     timestamp: { type: Number, default: Date.now }
 }, { _id: false });  // Prevents Mongoose from adding an extra `_id` field
 
-const MediaSchema = new mongoose.Schema({
-    type: { type: String, required: true }, // 'image', 'video', 'audio', 'file'
-    url: { type: String, required: true },
-    filename: { type: String, required: true },
-    size: { type: Number, required: true },
-    mimeType: { type: String, required: true },
-    duration: { type: Number }, // For audio/video
-    thumbnail: { type: String }, // For video
-    width: { type: Number }, // For images/videos
-    height: { type: Number } // For images/videos
-}, { _id: false });
+// Removed MediaSchema as we're no longer supporting audio messages
 
 const Chats = new mongoose.Schema({
     chatid: { type: String, required: true },
     senderid: { type: String, required: true },
     recieverid: { type: String },
     groupid: { type: String },
-    messagetext: { type: String },
-    media: MediaSchema,
+    messagetext: { type: String, required: true }, // Made required since it's the only content type now
+    // Removed media field
     messageType: { 
         type: String, 
-        enum: ['text', 'image', 'video', 'audio', 'file'],
+        enum: ['text'], // Only text type allowed now
         default: 'text'
     },
 

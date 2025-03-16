@@ -8,12 +8,18 @@ const ReactionSchema = new mongoose.Schema({
 
 const syncChats = new mongoose.Schema({
     whomtosend: { type: String, required: true },
-    syncstaus: { type: Boolean, default: false },
+    syncstatus: { type: Boolean, default: false },
     chatid: { type: String, required: true },
     senderid: { type: String, required: true },
     recieverid: { type: String },
     groupid: { type: String },
     messagetext: { type: String, required: true },
+    
+    messageType: { 
+        type: String, 
+        enum: ['text'],
+        default: 'text'
+    },
 
     sent: {
         issent: { type: Boolean },

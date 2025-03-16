@@ -12,17 +12,6 @@ const { send } = require('process');
 const cookie = require('cookie-parser');
 const session = require('express-session');
 const configureSession = require('./config/session');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const multer = require('multer');
-
-// Configure Cloudinary
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-    secure: true
-});
 
 const app = express();
 const server = http.createServer(app);
@@ -79,231 +68,12 @@ app.use((req, res, next) => {
     next();
 });
 
-// Configure Cloudinary storage
-const storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
-        folder: 'chat_uploads',
-        resource_type: 'auto',
-        allowed_formats: [
-            // Images
-            'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff',
-            // Videos
-            'mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv',
-            // Audio
-            'mp3', 'wav', 'ogg', 'midi', 'aac', 'flac',
-            // Documents
-            'pdf', 'doc', 'docx',
-            // Spreadsheets
-            'xls', 'xlsx',
-            // Presentations
-            'ppt', 'pptx',
-            // Archives
-            'zip', 'rar', '7z', 'tar',
-            // Text files
-            'txt', 'csv', 'html', 'css', 'js',
-            // Code files
-            'json', 'xml', 'yaml', 'py'
-        ],
-        transformation: { quality: 'auto' }
-    }
-});
-
-const upload = multer({
-    storage: storage,
-    limits: {
-        fileSize: 50 * 1024 * 1024 // 50MB limit
-    },
-    fileFilter: function (req, file, cb) {
-        // Accept images, videos, audio, documents, spreadsheets, presentations, and archives
-        const allowedTypes = [
-            // Images
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/bmp', 'image/tiff',
-            // Videos
-            'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska',
-            // Audio
-            'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/midi', 'audio/webm', 'audio/aac', 'audio/flac',
-            // Documents
-            'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            // Spreadsheets
-            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            // Presentations
-            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            // Archives
-            'application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed', 'application/x-tar',
-            // Text files
-            'text/plain', 'text/csv', 'text/html', 'text/css', 'text/javascript',
-            // Code files
-            'application/json', 'application/xml', 'application/x-yaml', 'application/x-python-code',
-            // Fonts
-            'font/ttf', 'font/otf', 'font/woff', 'font/woff2'
-        ];
-        
-        if (allowedTypes.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Invalid file type. Allowed types: images (JPEG, PNG, GIF, WebP, SVG, BMP, TIFF), videos (MP4, WebM, OGG, MOV, AVI, MKV), audio (MP3, WAV, OGG, MIDI, AAC, FLAC), documents (PDF, DOC, DOCX), spreadsheets (XLS, XLSX), presentations (PPT, PPTX), archives (ZIP, RAR, 7Z, TAR), text files (TXT, CSV, HTML, CSS, JS), code files (JSON, XML, YAML, PY), and fonts (TTF, OTF, WOFF, WOFF2)'));
-        }
-    }
-});
-
-// File upload endpoint - Define BEFORE the router middleware
-// to prevent body-parser from trying to parse multipart/form-data
-app.post('/upload', (req, res, next) => {
-    // Check Content-Type before proceeding with multer
-    const contentType = req.headers['content-type'] || '';
-    console.log('Upload request Content-Type:', contentType);
-    
-    if (!contentType.includes('multipart/form-data')) {
-        console.error('Invalid Content-Type for file upload:', contentType);
-        return res.status(400).json({
-            success: false,
-            error: 'Invalid Content-Type. Expected multipart/form-data but received: ' + contentType,
-            help: 'Make sure your frontend is using FormData and not sending JSON'
-        });
-    }
-    
-    // Proceed with multer middleware
-    next();
-}, upload.array('file', 10), (req, res) => {
-    try {
-        console.log("Processing file upload...");
-        if (!req.files || req.files.length === 0) {
-            throw new Error('No files uploaded');
-        }
-
-        console.log(`Received ${req.files.length} files`);
-
-        // Handle multiple files with Cloudinary URLs
-        const files = req.files.map((file, index) => {
-            // Debug log to see the structure of the file object
-            console.log(`File ${index + 1} structure:`, JSON.stringify(file, null, 2));
-            
-            let publicId;
-            
-            // Handle various Cloudinary response structures
-            if (file.public_id) {
-                publicId = file.public_id;
-            } else if (file.filename) {
-                publicId = file.filename.split('.')[0];
-            } else if (file.path) {
-                // Try to extract from the Cloudinary URL
-                try {
-                    const pathParts = new URL(file.path).pathname.split('/');
-                    // Cloudinary URLs typically have the public ID in the last segment before file extension
-                    const filename = pathParts[pathParts.length - 1];
-                    publicId = filename.split('.')[0];
-                } catch (err) {
-                    console.error('Error parsing URL:', err);
-                    // Fallback using parts of the path
-                    const parts = file.path.split('/');
-                    publicId = parts[parts.length - 1].split('.')[0];
-                }
-            } else {
-                // Generate a fallback ID
-                publicId = `file_${Date.now()}_${index}`;
-            }
-            
-            return {
-                url: file.path, // Cloudinary returns the full URL in the path property
-                filename: file.originalname || `file_${index + 1}`,
-                size: file.size,
-                mimeType: file.mimetype,
-                public_id: publicId
-            };
-        });
-
-        console.log('Processed files for client:', files);
-
-        res.json({
-            success: true,
-            files: files
-        });
-    } catch (error) {
-        console.error('Upload error:', error);
-        res.status(400).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// Add endpoint to delete a file from Cloudinary
-app.delete('/delete-file/:publicId', async (req, res) => {
-    try {
-        const publicId = req.params.publicId;
-        if (!publicId) {
-            return res.status(400).json({
-                success: false,
-                error: 'No public ID provided'
-            });
-        }
-
-        console.log('Attempting to delete file with publicId:', publicId);
-        
-        // The public_id may need to include the folder path for Cloudinary to recognize it
-        const fullPublicId = publicId.includes('chat_uploads/') ? 
-            publicId : 
-            `chat_uploads/${publicId}`;
-            
-        console.log('Using fullPublicId for deletion:', fullPublicId);
-
-        // Delete file from Cloudinary
-        const result = await cloudinary.uploader.destroy(fullPublicId);
-        console.log('Cloudinary delete result:', result);
-        
-        if (result.result === 'ok') {
-            res.json({
-                success: true,
-                message: 'File deleted successfully'
-            });
-        } else {
-            throw new Error('Failed to delete file from Cloudinary: ' + result.result);
-        }
-    } catch (error) {
-        console.error('Cloudinary delete error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// Add router middleware AFTER defining the upload endpoints
+// Add router middleware 
 app.use(router);
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
     // console.log('User connected with socket ID:', socket.id);
-
-    // socket.on('registersocket', async (email) => {
-
-    //     // register socket id with user uid
-    //     const user = await User.findOne({ email: email });
-    //     if (!user) {
-    //         return;
-    //     }
-    //     // console.log('User:', user);
-    //     user.socketid = socket.id;
-    //     user.onlinestatus.status = true;
-    //     if (!user.profilepicture) {
-    //         user.profilepicture = `https://api.dicebear.com/7.x/bottts/svg?seed=${user.uid}`
-    //     }
-
-
-
-
-
-
-    //     await user.save();
-
-
-
-
-    //     io.to(socket.id).emit('YourDetails', user);
-    // })
-
-
 
     socket.on('registersocket', async (email) => {
         try {
@@ -323,37 +93,6 @@ io.on('connection', (socket) => {
                 user.profilepicture = `https://api.dicebear.com/7.x/bottts/svg?seed=${user.uid}`;
             }
 
-            // // HANDLE ANY PENDING MESSAGE FOR CLIENT
-            // const pendingMessages = syncmessage.find({ whomtosend: user.uid });
-            // if (pendingMessages) {
-            //     for (const message of pendingMessages) {
-            //         const messagetosend = {
-            //             chatid: message.chatid,
-            //             senderid: message.senderid,
-            //             recieverid: message.recieverid,
-            //             groupid: message.groupid,
-            //             messagetext: message.messagetext,
-            //             sent: message.sent,
-            //             delivered: message.delivered,
-            //             read: message.read,
-            //             deletedfor: message.deletedfor,
-            //             deletedby: message.deletedby,
-            //             reactions: message.reactions
-            //         }
-            //         io.to(socket.id).emit('private sync message', messagetosend);
-            //     }
-            //     pendingMessages.deleteMany();
-            // }
-
-            // // Notify the sender about delivery
-            // const senderSocket = await User.findOne({ uid: msg.senderid });
-            // if (senderSocket && senderSocket.onlinestatus.status) {
-            //     io.to(senderSocket.socketid).emit('private message update from server', msg);
-            // }
-
-
-
-
             // Save user and emit details
             await user.save();
             io.to(socket.id).emit('YourDetails', user);
@@ -363,23 +102,16 @@ io.on('connection', (socket) => {
         }
     });
 
-
-
-
-
-
-
-
-
-
-
-
-
     // LISTEN FOR PRIVATE MESSAGES ADD MESSAGE TO DB TO GET MESSAGEID AND SEND BACK TO SENDER
     socket.on('private message', async (data) => {
         try {
             const newmessage = data.newmessage;
             const chats = data.chats;
+
+            // Validate message type - only allow text messages
+            if (newmessage.messageType !== 'text') {
+                throw new Error('Only text messages are supported');
+            }
 
             // Find the sender
             const sender = await User.findOne({ uid: newmessage.senderid });
@@ -412,7 +144,8 @@ io.on('connection', (socket) => {
             const dbmessage = new message({
                 ...newmessage,
                 sent,
-                messageType: newmessage.media ? newmessage.media.type : 'text'
+                // Set the message type to 'text'
+                messageType: 'text'
             });
 
             await dbmessage.save();
@@ -442,9 +175,6 @@ io.on('connection', (socket) => {
             });
         }
     });
-
-
-
 
     // listten for RECIEIVE confirmation and update database and send to sender
     socket.on('private message recieve confirmation', async (modifiedmessage) => {
@@ -538,9 +268,6 @@ io.on('connection', (socket) => {
         }
     });
 
-
-
-
     socket.on('private message update', async (modifiedmessage) => {
         try {
             const messageid = modifiedmessage._id;
@@ -580,6 +307,20 @@ io.on('connection', (socket) => {
                 console.log("❌ Message Receiver not found in DB.");
                 return;
             }
+
+            // Define helper function for updating last message in chat
+            const updateLastMessageIfNeeded = async (user, chatId, newText) => {
+                if (!user || !user.chats) return;
+                
+                // Find the chat in user's chat list
+                const userChat = user.chats.find(c => c.chatid === chatId);
+                if (userChat) {
+                    userChat.lastmessage = newText;
+                    userChat.updatedat = new Date();
+                    await user.save();
+                    console.log(`✅ Updated last message for user ${user.uid} in chat ${chatId}`);
+                }
+            };
 
             // Handle differently based on whether it's delete-for-everyone or not
             if (isDeleteForEveryone) {
@@ -647,9 +388,6 @@ io.on('connection', (socket) => {
         }
     });
 
-
-
-
     socket.on('fetch chats', async (uid) => {
         // find chat with chatid
         const chat = await message.find({ chatid: uid });
@@ -659,13 +397,6 @@ io.on('connection', (socket) => {
         console.log('Chat:', chat);
         io.to(socket.id).emit('send chats', chat);
     })
-
-
-
-
-
-
-
 
     socket.on('disconnect', async () => {
         console.log('User disconnected');
@@ -711,7 +442,6 @@ io.on('connection', (socket) => {
         );
     })
 
-
     // Listen for typing start event
     socket.on('typing-start', (data) => {
         // Broadcast to all other users in the same room/channel
@@ -723,20 +453,6 @@ io.on('connection', (socket) => {
         // Broadcast to all other users in the same room/channel
         socket.broadcast.emit('typing-stop', data);
     });
-
-
-
-
-
-
-
-    // socket.on('openchannel', (data) => {
-    //     console.log('Opening channel:', data);
-
-    //     socket.emit('openchannel', data);
-
-    // }
-    // );
 
     // Voice Call Signaling
     socket.on('call-user', async ({ userToCall, from, offer }) => {
@@ -936,7 +652,6 @@ server.listen(PORT, async () => {
     await connectDB();
 });
 
-// ADD THIS FUNCTION AFTER THE SOCKET EVENT HANDLER
 // Helper function to update the last message in a user's chat if needed
 async function updateLastMessageIfNeeded(user, chatId, newLastMessage) {
     if (!user || !user.chats) return;
