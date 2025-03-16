@@ -808,12 +808,23 @@ function ChatApp() {
                 throw new Error("Logout failed");
             }
 
-            setUser(null);  // Clear user state
-            localStorage.removeItem('userEmail'); // Clear stored email
-            navigate('/login'); // Redirect to login page
-            console.log("User logged out successfully");
+            // Clear all auth-related data from localStorage
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('userEmail');
+            
+            // Clear any other user-related data
+            setUser(null);
+            
+            // Navigate to login page
+            navigate('/login');
+            
         } catch (error) {
-            console.error("Logout error:", error);
+            console.error("Error during logout:", error);
+            // Still try to clear local data even if server request fails
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('userEmail');
+            setUser(null);
+            navigate('/login');
         }
     };
 

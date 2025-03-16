@@ -159,13 +159,26 @@ router.get('/',verifyJWT)
 router.post('/signup', register)
 router.post('/login', login)
 router.post("/logout", (req, res) => {
+    // Clear the HTTP-only cookie with same settings as when it was set
     res.clearCookie("token", { 
         httpOnly: true, 
         sameSite: 'none',
         secure: true,
         path: '/'
     });
-    res.status(200).json({ message: "Logged out successfully" });
+    
+    // Clear the debug cookie too
+    res.clearCookie("auth_debug", {
+        httpOnly: false,
+        sameSite: 'none',
+        secure: true,
+        path: '/'
+    });
+    
+    res.status(200).json({ 
+        message: "Logged out successfully",
+        status: "success"
+    });
 });
 
 router.get('/me', verifyJWT, (req, res) => {
