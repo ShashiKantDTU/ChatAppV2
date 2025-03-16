@@ -50,6 +50,7 @@ app.use((req, res, next) => {
         host: req.headers.host,
         referer: req.headers.referer
     });
+    console.log('Content-Type:', req.headers['content-type']);
     next();
 });
 
@@ -77,9 +78,6 @@ app.use((req, res, next) => {
     
     next();
 });
-
-// Middleware for routes
-app.use(router);
 
 // Configure Cloudinary storage
 const storage = new CloudinaryStorage({
@@ -149,35 +147,57 @@ const upload = multer({
     }
 });
 
-// File upload endpoint
+// File upload endpoint - Define BEFORE the router middleware
+// to prevent body-parser from trying to parse multipart/form-data
 app.post('/upload', upload.array('file', 10), (req, res) => {
     try {
+        console.log("Processing file upload...");
         if (!req.files || req.files.length === 0) {
             throw new Error('No files uploaded');
         }
 
+        console.log(`Received ${req.files.length} files`);
+
         // Handle multiple files with Cloudinary URLs
-        const files = req.files.map(file => {
+        const files = req.files.map((file, index) => {
             // Debug log to see the structure of the file object
-            console.log('File object structure:', JSON.stringify(file, null, 2));
+            console.log(`File ${index + 1} structure:`, JSON.stringify(file, null, 2));
             
-            // Extract the public_id from the Cloudinary response
-            // The public_id is typically in the filename property or could be parsed from the path
-            const cloudinaryPath = file.path;
-            const pathParts = cloudinaryPath.split('/');
-            const filenameWithExtension = pathParts[pathParts.length - 1]; 
-            const publicId = filenameWithExtension.split('.')[0]; // Remove extension
+            let publicId;
+            
+            // Handle various Cloudinary response structures
+            if (file.public_id) {
+                publicId = file.public_id;
+            } else if (file.filename) {
+                publicId = file.filename.split('.')[0];
+            } else if (file.path) {
+                // Try to extract from the Cloudinary URL
+                try {
+                    const pathParts = new URL(file.path).pathname.split('/');
+                    // Cloudinary URLs typically have the public ID in the last segment before file extension
+                    const filename = pathParts[pathParts.length - 1];
+                    publicId = filename.split('.')[0];
+                } catch (err) {
+                    console.error('Error parsing URL:', err);
+                    // Fallback using parts of the path
+                    const parts = file.path.split('/');
+                    publicId = parts[parts.length - 1].split('.')[0];
+                }
+            } else {
+                // Generate a fallback ID
+                publicId = `file_${Date.now()}_${index}`;
+            }
             
             return {
                 url: file.path, // Cloudinary returns the full URL in the path property
-                filename: file.originalname,
+                filename: file.originalname || `file_${index + 1}`,
                 size: file.size,
                 mimeType: file.mimetype,
-                public_id: publicId // Correctly extract the public_id from Cloudinary response
+                public_id: publicId
             };
         });
 
-        console.log('Processed files:', files);
+        console.log('Processed files for client:', files);
 
         res.json({
             success: true,
@@ -232,6 +252,9 @@ app.delete('/delete-file/:publicId', async (req, res) => {
         });
     }
 });
+
+// Add router middleware AFTER defining the upload endpoints
+app.use(router);
 
 // Socket.io connection handling
 io.on('connection', (socket) => {

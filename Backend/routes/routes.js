@@ -10,7 +10,16 @@ const nanoid = require('nanoid')
 
 const {register , login, verifyJWT , logout} = require('../controllers/userController')
 
-router.use(express.json())
+// Modify JSON parser middleware to skip multipart form data requests
+router.use((req, res, next) => {
+    // Skip JSON parsing for multipart requests
+    if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+        return next();
+    }
+    // Apply JSON parsing for all other requests
+    express.json()(req, res, next);
+});
+
 router.use(express.urlencoded({ extended: true }))
 router.use(cookie())
 
