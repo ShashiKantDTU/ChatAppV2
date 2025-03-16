@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+
 
 export const AuthContext = createContext(null);
 
@@ -7,6 +8,7 @@ const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true); // 🔹 Loading state
     const location = useLocation();
+    const navigate = useNavigate()
 
     // 🔹 Skip authentication check for login & signup pages
     const excludedPaths = ['/login', '/signup'];
@@ -31,6 +33,8 @@ const AuthProvider = ({ children }) => {
                 if (data.user) {
                     console.log("User authenticated:", data.user);
                     setUser(data.user);
+                    setLoading(false);
+                    navigate('/') // navigate to home page if userdata recieved
                 } else if (retryCount < 1) {
                     // Retry once after a short delay if auth failed
                     // This handles race conditions with cookie setting
