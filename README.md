@@ -93,4 +93,46 @@ If socket connections fail:
 If the app can't connect to MongoDB:
 - Verify your MongoDB Atlas connection string
 - Check that your database user has correct permissions
-- Make sure network access is properly configured 
+- Make sure network access is properly configured
+
+# ChatApp Production Deployment Guide
+
+## Google OAuth Configuration
+
+For Google Login to work properly in production, you need to update your Google OAuth configuration in the Google Cloud Console:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Navigate to your project
+3. Go to "APIs & Services" > "Credentials"
+4. Find your OAuth 2.0 Client ID and click to edit
+5. Add these Authorized Redirect URIs:
+   - http://localhost:3000/auth/google/callback (for local development)
+   - https://chatappv2-qa96.onrender.com/auth/google/callback (for production)
+6. Save your changes
+
+## Environment Variables
+
+Ensure these environment variables are set in your Render dashboard:
+
+- `NODE_ENV`: set to `production`
+- `CLIENT_URL`: your Vercel frontend URL (e.g. https://chat-app-v2-git-test-shashi-kants-projects-e20801e5.vercel.app)
+- `BACKEND_URL`: your Render backend URL (e.g. https://chatappv2-qa96.onrender.com)
+- `GOOGLE_CLIENT_ID`: your Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET`: your Google OAuth client secret
+- `JWT_SECRET`: a strong secret key for JWT tokens
+- `MongoURI`: your MongoDB connection string
+- Cloudinary credentials (if using Cloudinary)
+
+## Frontend Configuration
+
+In your Vercel deployment, set these environment variables:
+
+- `VITE_API_URL`: your Render backend URL (e.g. https://chatappv2-qa96.onrender.com)
+
+## Troubleshooting
+
+If Google login still doesn't work:
+1. Check browser console for any errors
+2. Verify that cookies are being set properly
+3. Confirm your redirect URIs are correct in Google Cloud Console
+4. Make sure your backend environment variables are correctly set 
