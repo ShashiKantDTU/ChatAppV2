@@ -18,6 +18,12 @@ const User = require('../models/userschema');
 
 
 const verifyJWT = async (req, res, next) => {
+    // Log request headers to debug cookie transmission
+    console.log('=== AUTH DEBUG ===');
+    console.log('Request URL:', req.originalUrl);
+    console.log('Cookie header:', req.headers.cookie);
+    console.log('Origin header:', req.headers.origin);
+    
     const token = req.cookies.token;
     console.log('Token from cookies:', token ? 'Token exists' : 'Token missing');
     console.log('Cookies received:', req.cookies);
@@ -126,7 +132,14 @@ const login = async (req, res, next) => {
                 sameSite: 'None',
                 secure: true,
                 path: '/',
-                domain: isProduction ? undefined : 'localhost'
+            });
+
+            // Log cookie settings for debugging
+            console.log('Login: Setting auth cookie with token. Cookie options:', {
+                httpOnly: true,
+                sameSite: 'None',
+                secure: true,
+                path: '/'
             });
 
             res.status(201).json({ message: 'User Loggedin successfully' });
@@ -146,7 +159,6 @@ const logout = async (req, res, next) => {
         sameSite: 'None',
         secure: true,
         path: '/',
-        domain: isProduction ? undefined : 'localhost',
         expires: new Date(0)
     });
     res.user = null;

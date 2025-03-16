@@ -55,8 +55,18 @@ router.get('/auth/google/callback',
             sameSite: 'None', // Always use None for cross-site requests
             secure: true, // Always use secure in production
             path: '/',
-            domain: isProduction ? undefined : 'localhost' // Don't specify domain in production
+            // Remove domain setting completely - let browser handle it
         });
+        
+        // Log what we're doing for debugging
+        console.log('Setting auth cookie with token. Cookie options:', {
+            httpOnly: true,
+            sameSite: 'None',
+            secure: true,
+            path: '/',
+            isProduction
+        });
+        
         res.user = req.user;
         console.log('res.user in routes/googleauthcallback ', res.user)
         // check if user already exists
@@ -110,7 +120,7 @@ router.post("/logout", (req, res) => {
         sameSite: 'None',
         secure: true,
         path: '/',
-        domain: isProduction ? undefined : 'localhost'
+        // Remove domain setting
     });
     res.status(200).json({ message: "Logged out successfully" });
 });
