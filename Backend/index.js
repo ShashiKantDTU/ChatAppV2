@@ -149,7 +149,23 @@ const upload = multer({
 
 // File upload endpoint - Define BEFORE the router middleware
 // to prevent body-parser from trying to parse multipart/form-data
-app.post('/upload', upload.array('file', 10), (req, res) => {
+app.post('/upload', (req, res, next) => {
+    // Check Content-Type before proceeding with multer
+    const contentType = req.headers['content-type'] || '';
+    console.log('Upload request Content-Type:', contentType);
+    
+    if (!contentType.includes('multipart/form-data')) {
+        console.error('Invalid Content-Type for file upload:', contentType);
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid Content-Type. Expected multipart/form-data but received: ' + contentType,
+            help: 'Make sure your frontend is using FormData and not sending JSON'
+        });
+    }
+    
+    // Proceed with multer middleware
+    next();
+}, upload.array('file', 10), (req, res) => {
     try {
         console.log("Processing file upload...");
         if (!req.files || req.files.length === 0) {

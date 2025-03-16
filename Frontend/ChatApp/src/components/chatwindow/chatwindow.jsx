@@ -313,14 +313,49 @@ const ChatWindow = (props) => {
             });
 
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+            
+            // Log the FormData contents for debugging
+            console.log("FormData created, files appended. FormData contains:");
+            for (let pair of formData.entries()) {
+                console.log(pair[0] + ': ' + (pair[1] instanceof File ? 
+                    `File(${pair[1].name}, ${pair[1].type}, ${pair[1].size} bytes)` : 
+                    pair[1]));
+            }
+            
+            // IMPORTANT: Don't manually set Content-Type when using FormData
+            // The browser will automatically set the correct multipart/form-data
+            // Content-Type with the proper boundary
             const response = await fetch(`${API_URL}/upload`, {
                 method: 'POST',
                 body: formData,
-                credentials: 'include' // Include credentials if needed for authentication
+                credentials: 'include', // Include credentials if needed for authentication
+                // Explicitly do NOT set Content-Type here - browser will set it correctly
+                headers: {
+                    // Including Authorization header if needed for authentication
+                    ...(localStorage.getItem('token') ? {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    } : {})
+                }
+            });
+
+            // Log response details for debugging
+            console.log('Upload response status:', response.status);
+            console.log('Upload response headers:', {
+                contentType: response.headers.get('content-type'),
+                contentLength: response.headers.get('content-length')
             });
 
             if (!response.ok) {
-                throw new Error('Upload to Cloudinary failed');
+                // Try to get detailed error from response
+                let errorMessage = 'Upload to Cloudinary failed';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || errorMessage;
+                    console.error('Upload error details:', errorData);
+                } catch (jsonError) {
+                    console.error('Could not parse error response:', jsonError);
+                }
+                throw new Error(errorMessage);
             }
 
             const data = await response.json();
@@ -712,16 +747,47 @@ const ChatWindow = (props) => {
         try {
             const formData = new FormData();
             formData.append('file', audioBlob, 'audio.webm');
+            
+            // Log the FormData contents for debugging
+            console.log("Audio FormData created with blob. FormData contains:");
+            for (let pair of formData.entries()) {
+                console.log(pair[0] + ': ' + (pair[1] instanceof Blob ? 
+                    `Blob(${pair[1].size} bytes, ${pair[1].type})` : 
+                    pair[1]));
+            }
 
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
             const response = await fetch(`${API_URL}/upload`, {
                 method: 'POST',
                 body: formData,
-                credentials: 'include' // Include credentials if needed
+                credentials: 'include', // Include credentials if needed
+                // Explicitly do NOT set Content-Type when using FormData
+                headers: {
+                    // Include Authorization header if needed
+                    ...(localStorage.getItem('token') ? {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    } : {})
+                }
+            });
+            
+            // Log response details for debugging
+            console.log('Audio upload response status:', response.status);
+            console.log('Audio upload response headers:', {
+                contentType: response.headers.get('content-type'),
+                contentLength: response.headers.get('content-length')
             });
 
             if (!response.ok) {
-                throw new Error('Cloudinary audio upload failed');
+                // Try to get detailed error from response
+                let errorMessage = 'Cloudinary audio upload failed';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || errorMessage;
+                    console.error('Audio upload error details:', errorData);
+                } catch (jsonError) {
+                    console.error('Could not parse error response:', jsonError);
+                }
+                throw new Error(errorMessage);
             }
 
             const data = await response.json();

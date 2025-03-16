@@ -12,14 +12,23 @@ window.fetch = function(...args) {
       (resource.includes('localhost:3000') || 
        resource.includes('chatappv2-qa96.onrender.com'))) {
     
+    // Check if this is a FormData upload
+    const isFormDataUpload = config?.body instanceof FormData;
+    
+    // Clone headers to avoid modifying the original object
+    const headers = { ...(config?.headers || {}) };
+    
+    // Only add Content-Type for non-FormData requests
+    if (!isFormDataUpload) {
+      headers['Content-Type'] = 'application/json';
+    }
+    
+    headers['Accept'] = 'application/json';
+    
     config = {
       ...config,
       credentials: 'include',
-      headers: {
-        ...(config?.headers || {}),
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      }
+      headers: headers
     };
   }
   
