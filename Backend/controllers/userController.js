@@ -20,12 +20,13 @@ const User = require('../models/userschema');
 const verifyJWT = async (req, res, next) => {
     const token = req.cookies.token;
     if (!token) {
-        return res.status(401).json({ message: 'Not Loggedin' });
+        return res.status(401).json({ message: 'Not Loggedin (No Token)' });
     }
     
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         // Find the user in database
+        console.log('decoded', decoded)
         const user = await User.findOne({ email: decoded.email });
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
