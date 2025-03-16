@@ -17,6 +17,7 @@ const session = require('express-session');
 const configureSession = require('./config/session');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const bodyParser = require('body-parser');
 
 const app = express();
 const server = http.createServer(app);
@@ -42,15 +43,9 @@ app.use((req, res, next) => {
         cookie: req.headers.cookie,
         origin: req.headers.origin,
         host: req.headers.host,
-        referer: req.headers.referer
+        referer: req.headers.referer,
+        'content-type': req.headers['content-type']
     });
-    
-    // Check if it's a file upload request
-    if (req.originalUrl === '/upload' || req.originalUrl === '/upload-audio') {
-        console.log('File upload request detected, bypassing JSON parser');
-        return next();
-    }
-    
     next();
 });
 
@@ -79,16 +74,38 @@ app.use((req, res, next) => {
     next();
 });
 
-// Apply JSON parser middleware ONLY to non-upload routes
+// IMPORTANT: Only parse JSON for requests with the appropriate content-type
 app.use((req, res, next) => {
-    // Skip JSON parsing for upload routes
-    if (req.originalUrl === '/upload' || req.originalUrl === '/upload-audio') {
-        console.log('Skipping JSON parsing for upload route');
+    const contentType = req.headers['content-type'] || '';
+    
+    // Check for upload routes or multipart content type
+    if (req.originalUrl === '/upload' || 
+        req.originalUrl === '/upload-audio' || 
+        contentType.includes('multipart/form-data')) {
+        console.log('⚠️ Bypassing JSON parser for multipart request');
         return next();
     }
     
-    // Apply JSON parsing for all other routes
-    express.json()(req, res, next);
+    // Apply JSON parsing only for JSON content type
+    if (contentType.includes('application/json')) {
+        console.log('✅ Applying JSON parser');
+        express.json()(req, res, next);
+    } else {
+        // For other content types, use a url-encoded parser or just pass through
+        console.log('🔄 Using URL-encoded parser or passing through');
+        express.urlencoded({ extended: true })(req, res, next);
+    }
+});
+
+// Set explicit routes for file uploads BEFORE the router middleware
+app.post('/upload', (req, res, next) => {
+    console.log('📂 Upload route hit');
+    next();
+});
+
+app.post('/upload-audio', (req, res, next) => {
+    console.log('🎵 Audio upload route hit');
+    next();
 });
 
 // Middleware for routes
