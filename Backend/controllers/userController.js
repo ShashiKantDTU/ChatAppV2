@@ -108,13 +108,17 @@ const login = async (req, res, next) => {
             return res.json({ message: 'Incorrect Password' })
         } else {
             
-            // Genrate JWT and send cookie to client 
+            // Generate JWT and send cookie to client 
             const token = jwt.sign({ username: profile.username, email: email }, process.env.JWT_SECRET)
             req.user = token;
+            
+            // Set consistent cookie settings across all auth endpoints
+            const isProduction = process.env.NODE_ENV === 'production';
             res.cookie('token', token, {
                 httpOnly: true,
-                sameSite: 'None',
-                secure: true,
+                sameSite: isProduction ? 'None' : 'Lax',
+                secure: isProduction,
+                path: '/'
             });
 
             res.status(201).json({ message: 'User Loggedin successfully' });
@@ -127,7 +131,15 @@ const login = async (req, res, next) => {
 }
 
 const logout = async (req, res, next) => {
-    res.cookie('token', "")
+    // Use same cookie options for consistent deletion
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('token', "", {
+        httpOnly: true,
+        sameSite: isProduction ? 'None' : 'Lax',
+        secure: isProduction,
+        path: '/',
+        expires: new Date(0)
+    });
     res.user = null;
     res.status(200).json({ message: 'Logged out successfully' })
     console.log('Logged out')

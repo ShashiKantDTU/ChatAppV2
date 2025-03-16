@@ -44,11 +44,13 @@ router.get('/auth/google/callback',
         // ✅ Generate JWT token
         const token = jwt.sign({ email:user.email, name: user.displayName }, process.env.JWT_SECRET);
 
-        // ✅ Store JWT token in HTTP-only cookie
+        // ✅ Store JWT token in HTTP-only cookie with consistent settings
+        const isProduction = process.env.NODE_ENV === 'production';
         res.cookie('token', token, {
             httpOnly: true,
-            secure: false,  // ✅ Change to `true` in production with HTTPS
-            sameSite: 'lax'
+            sameSite: isProduction ? 'None' : 'Lax',
+            secure: isProduction,
+            path: '/'
         });
         res.user = token;
         // check if user already exists
@@ -96,7 +98,13 @@ router.get('/',verifyJWT)
 router.post('/signup', register)
 router.post('/login', login)
 router.post("/logout", (req, res) => {
-    res.clearCookie("token", { httpOnly: true, sameSite: "Lax" }); // ✅ Clears token
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.clearCookie("token", { 
+        httpOnly: true, 
+        sameSite: isProduction ? 'None' : 'Lax',
+        secure: isProduction,
+        path: '/'
+    });
     res.status(200).json({ message: "Logged out successfully" });
 });
 

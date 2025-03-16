@@ -17,9 +17,11 @@ const AuthProvider = ({ children }) => {
             return;
         }
 
-        const fetchUser = async () => {
+        const fetchUser = async (retryCount = 0) => {
             try {
                 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+                console.log(`Attempting to fetch user authentication (attempt ${retryCount + 1})`);
+                
                 const response = await fetch(`${API_URL}/me`, {
                     credentials: "include", // Allows sending cookies
                 });
@@ -27,13 +29,24 @@ const AuthProvider = ({ children }) => {
                 const data = await response.json();
                 
                 if (data.user) {
-                    // console.log("User authenticated:", data.user);
+                    console.log("User authenticated:", data.user);
                     setUser(data.user);
+                } else if (retryCount < 1) {
+                    // Retry once after a short delay if auth failed
+                    // This handles race conditions with cookie setting
+                    console.log("Auth check failed, retrying in 500ms...");
+                    setTimeout(() => fetchUser(retryCount + 1), 500);
+                    return; // Don't finish loading yet
+                } else {
+                    console.log("User not authenticated after retry");
                 }
             } catch (error) {
-                console.log("User not authenticated" , error);
+                console.log("Error checking authentication:", error);
             } finally {
-                setLoading(false); // 🔹 Stop loading after fetch
+                // Only set loading to false if we're not going to retry
+                if (retryCount > 0) {
+                    setLoading(false);
+                }
             }
         };
 
