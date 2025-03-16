@@ -20,6 +20,15 @@ const AuthProvider = ({ children }) => {
             return;
         }
 
+        // Add a safety timeout to prevent infinite loading
+        const safetyTimeout = setTimeout(() => {
+            if (loading) {
+                console.log("Safety timeout triggered - forcing loading to false");
+                setLoading(false);
+                navigate('/login');
+            }
+        }, 15000); // 15 seconds max loading time
+
         const fetchUser = async (retryCount = 0) => {
             try {
                 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -29,6 +38,14 @@ const AuthProvider = ({ children }) => {
                 // Get token from localStorage if available
                 const token = localStorage.getItem('auth_token');
                 console.log('Auth token from localStorage:', token ? 'Token exists' : 'No token');
+                
+                // If no token exists, don't even try to authenticate
+                if (!token) {
+                    console.log('No auth token found, redirecting to login');
+                    setLoading(false);
+                    navigate('/login');
+                    return;
+                }
                 
                 // Add explicit headers for better cross-domain cookie handling
                 const headers = {
@@ -49,6 +66,11 @@ const AuthProvider = ({ children }) => {
                 });
 
                 console.log('Auth response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`Authentication failed with status: ${response.status}`);
+                }
+                
                 const data = await response.json();
                 console.log('Auth response data:', data);
                 
@@ -64,6 +86,8 @@ const AuthProvider = ({ children }) => {
                     return; // Don't finish loading yet
                 } else {
                     console.log("User not authenticated after retries");
+                    // Clear potentially invalid token
+                    localStorage.removeItem('auth_token');
                     setLoading(false);
                     navigate('/login'); // Navigate to login if auth fails
                 }
@@ -75,6 +99,9 @@ const AuthProvider = ({ children }) => {
                     setTimeout(() => fetchUser(retryCount + 1), delay);
                     return;
                 } else {
+                    console.log("Authentication failed after retries:", error);
+                    // Clear potentially invalid token
+                    localStorage.removeItem('auth_token');
                     setLoading(false);
                     navigate('/login');
                 }
@@ -82,7 +109,10 @@ const AuthProvider = ({ children }) => {
         };
 
         fetchUser();
-    }, [location.pathname]); // Runs when route changes
+        
+        // Clear the safety timeout if component unmounts or dependencies change
+        return () => clearTimeout(safetyTimeout);
+    }, [location.pathname, navigate, loading]); // Added navigate and loading to dependencies
 
     // 🔹 Show loading screen while checking auth
     if (loading) {

@@ -1,12 +1,22 @@
 import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "./authcontext/authcontext";
 import { Navigate } from "react-router-dom";
+import Authloading from "./Loading/Authloading";
 
 const PrivateRoute = ({ children }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(null);
     const authContext = useContext(AuthContext);
 
     useEffect(() => {
+        // Add a safety timeout to prevent infinite loading
+        const safetyTimeout = setTimeout(() => {
+            if (isAuthenticated === 'loading' || isAuthenticated === null) {
+                console.log("PrivateRoute safety timeout triggered - forcing authentication state");
+                setIsAuthenticated(false);
+                localStorage.removeItem('auth_token');
+            }
+        }, 15000); // 15 seconds max loading time
+
         // Check if we have a token in localStorage even if authContext is null
         if (!authContext || !authContext.user) {
             const token = localStorage.getItem('auth_token');
@@ -40,6 +50,7 @@ const PrivateRoute = ({ children }) => {
                             }
                         }
                         // If we get here, token is invalid
+                        console.log("Token verification failed, removing token");
                         setIsAuthenticated(false);
                         localStorage.removeItem('auth_token');
                     } catch (error) {
@@ -57,11 +68,14 @@ const PrivateRoute = ({ children }) => {
             // We have a user in the context
             setIsAuthenticated(true);
         }
+
+        // Clear the safety timeout if component unmounts or dependencies change
+        return () => clearTimeout(safetyTimeout);
     }, [authContext]);
 
     // Show loading while checking token
     if (isAuthenticated === 'loading' || isAuthenticated === null) {
-        return <div className="loading-screen">Verifying authentication...</div>;
+        return <Authloading />;
     }
 
     // Redirect if not authenticated
