@@ -19,22 +19,28 @@ const User = require('../models/userschema');
 
 const verifyJWT = async (req, res, next) => {
     const token = req.cookies.token;
+    console.log('Token from cookies:', token ? 'Token exists' : 'Token missing');
+    console.log('Cookies received:', req.cookies);
+    
     if (!token) {
-        return res.status(401).json({ message: 'Not Loggedin (No Token)' });
+        return res.status(401).json({ message: 'Not Loggedin' });
     }
     
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('Token successfully decoded:', decoded.email);
+        
         // Find the user in database
-        console.log('decoded', decoded)
         const user = await User.findOne({ email: decoded.email });
         if (!user) {
+            console.log('User not found for email:', decoded.email);
             return res.status(404).json({ message: 'User not found' });
         }
         // Attach user details to request
         req.user = user;
         next();
     } catch (error) {
+        console.log('JWT verification error:', error.message);
         return res.status(403).json({ message: "Invalid or Expired Token" });
     }
 }
@@ -117,9 +123,10 @@ const login = async (req, res, next) => {
             const isProduction = process.env.NODE_ENV === 'production';
             res.cookie('token', token, {
                 httpOnly: true,
-                sameSite: isProduction ? 'None' : 'Lax',
-                secure: isProduction,
-                path: '/'
+                sameSite: 'None',
+                secure: true,
+                path: '/',
+                domain: isProduction ? undefined : 'localhost'
             });
 
             res.status(201).json({ message: 'User Loggedin successfully' });
@@ -136,9 +143,10 @@ const logout = async (req, res, next) => {
     const isProduction = process.env.NODE_ENV === 'production';
     res.cookie('token', "", {
         httpOnly: true,
-        sameSite: isProduction ? 'None' : 'Lax',
-        secure: isProduction,
+        sameSite: 'None',
+        secure: true,
         path: '/',
+        domain: isProduction ? undefined : 'localhost',
         expires: new Date(0)
     });
     res.user = null;

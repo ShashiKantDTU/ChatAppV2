@@ -52,9 +52,10 @@ router.get('/auth/google/callback',
         const isProduction = process.env.NODE_ENV === 'production';
         res.cookie('token', token, {
             httpOnly: true,
-            sameSite: isProduction ? 'None' : 'Lax',
-            secure: isProduction,
-            path: '/'
+            sameSite: 'None', // Always use None for cross-site requests
+            secure: true, // Always use secure in production
+            path: '/',
+            domain: isProduction ? undefined : 'localhost' // Don't specify domain in production
         });
         res.user = req.user;
         console.log('res.user in routes/googleauthcallback ', res.user)
@@ -106,9 +107,10 @@ router.post("/logout", (req, res) => {
     const isProduction = process.env.NODE_ENV === 'production';
     res.clearCookie("token", { 
         httpOnly: true, 
-        sameSite: isProduction ? 'None' : 'Lax',
-        secure: isProduction,
-        path: '/'
+        sameSite: 'None',
+        secure: true,
+        path: '/',
+        domain: isProduction ? undefined : 'localhost'
     });
     res.status(200).json({ message: "Logged out successfully" });
 });
