@@ -76,8 +76,16 @@ const DarkSignupForm = () => {
 
         if (data.message === 'User registered successfully') {
           setIsSubmitted(true);
-          // Store user data in localStorage
+          
+          // Store JWT token in localStorage if provided
+          if (data.token) {
+            console.log('Storing auth token in localStorage from signup');
+            localStorage.setItem('auth_token', data.token);
+          }
+          
+          // Store user email in localStorage
           localStorage.setItem('userEmail', formData.email);
+          
           setTimeout(() => {
             navigate('/'); // Redirect to home page after success
           }, 2000);

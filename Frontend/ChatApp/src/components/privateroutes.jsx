@@ -1,15 +1,76 @@
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "./authcontext/authcontext";
 import { Navigate } from "react-router-dom";
 
 const PrivateRoute = ({ children }) => {
+    const [isAuthenticated, setIsAuthenticated] = useState(null);
+    const authContext = useContext(AuthContext);
 
-    const authcontext = useContext(AuthContext);
-    if(!authcontext){
+    useEffect(() => {
+        // Check if we have a token in localStorage even if authContext is null
+        if (!authContext || !authContext.user) {
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                // If token exists but user isn't in context yet, we're in a loading state
+                setIsAuthenticated('loading');
+                
+                // Try to verify the token directly
+                const checkToken = async () => {
+                    try {
+                        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+                        const response = await fetch(`${API_URL}/me`, {
+                            method: 'GET',
+                            credentials: 'include',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.user) {
+                                setIsAuthenticated(true);
+                                // Set user in context if available
+                                if (authContext && authContext.setUser) {
+                                    authContext.setUser(data.user);
+                                }
+                                return;
+                            }
+                        }
+                        // If we get here, token is invalid
+                        setIsAuthenticated(false);
+                        localStorage.removeItem('auth_token');
+                    } catch (error) {
+                        console.error('Error verifying token:', error);
+                        setIsAuthenticated(false);
+                        localStorage.removeItem('auth_token');
+                    }
+                };
+                
+                checkToken();
+            } else {
+                setIsAuthenticated(false);
+            }
+        } else {
+            // We have a user in the context
+            setIsAuthenticated(true);
+        }
+    }, [authContext]);
+
+    // Show loading while checking token
+    if (isAuthenticated === 'loading' || isAuthenticated === null) {
+        return <div className="loading-screen">Verifying authentication...</div>;
+    }
+
+    // Redirect if not authenticated
+    if (!isAuthenticated) {
         return <Navigate to="/login" />;
     }
-    const { user } = authcontext;
-    return user ? children : <Navigate to="/login" />;
+
+    // User is authenticated
+    return children;
 };
 
 export default PrivateRoute;

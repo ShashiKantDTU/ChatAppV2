@@ -21,18 +21,30 @@ const AuthProvider = ({ children }) => {
 
         const fetchUser = async (retryCount = 0) => {
             try {
-                const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+                const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
                 console.log(`Attempting to fetch user authentication (attempt ${retryCount + 1})`);
                 console.log('API URL:', API_URL);
                 
+                // Get token from localStorage if available
+                const token = localStorage.getItem('auth_token');
+                console.log('Auth token from localStorage:', token ? 'Token exists' : 'No token');
+                
                 // Add explicit headers for better cross-domain cookie handling
+                const headers = {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                };
+                
+                // Add Authorization header if token exists
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                    console.log('Added token to Authorization header');
+                }
+                
                 const response = await fetch(`${API_URL}/me`, {
                     method: 'GET',
                     credentials: "include", // Essential for cross-domain cookies
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    }
+                    headers: headers
                 });
 
                 console.log('Auth response status:', response.status);

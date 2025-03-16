@@ -190,6 +190,7 @@ router.post("/logout", (req, res) => {
 });
 
 router.get('/me', verifyJWT, (req, res) => {
+    console.log('/me endpoint accessed with verified token. User:', req.user.email);
     const user = req.user;
     res.json({ 
         user: {

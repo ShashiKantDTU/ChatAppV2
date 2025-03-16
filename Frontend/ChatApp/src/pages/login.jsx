@@ -58,10 +58,17 @@ const DarkLoginForm = () => {
                 }
 
                 if (data.message === 'User Loggedin successfully') {
-                    // Store user data in localStorage if remember me is checked
+                    // Store the JWT token in localStorage for authentication
+                    if (data.token) {
+                        console.log('Storing auth token in localStorage');
+                        localStorage.setItem('auth_token', data.token);
+                    }
+                    
+                    // Store user email in localStorage if remember me is checked
                     if (formData.rememberMe) {
                         localStorage.setItem('userEmail', formData.email);
                     }
+                    
                     navigate('/'); // Redirect to home page
                 } else {
                     setErrors({
