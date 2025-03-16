@@ -23,7 +23,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.CLIENT_URL || 'http://localhost:5173',
+        origin: process.env.CLIENT_URL || 'https://chatpe.vercel.app',
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
         credentials: true
     }
@@ -34,6 +34,72 @@ app.use(cookie());
 
 // Add session support for OAuth state
 app.use(configureSession());
+
+// Log all incoming request headers for debugging
+app.use((req, res, next) => {
+    console.log('=== REQUEST DEBUG ===');
+    console.log('Request URL:', req.originalUrl);
+    console.log('Request headers:', {
+        cookie: req.headers.cookie,
+        origin: req.headers.origin,
+        host: req.headers.host,
+        referer: req.headers.referer,
+        'content-type': req.headers['content-type']
+    });
+    next();
+});
+
+// IMPORTANT: Enable CORS for all routes FIRST
+const allowedOrigins = [
+    'http://localhost:5173',
+    'https://chatpe.vercel.app'
+];
+
+// Enable CORS for specific choices
+app.use(cors({
+    origin: function(origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl requests)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.CLIENT_URL === origin) {
+            callback(null, true);
+        } else {
+            console.warn(`⚠️ CORS: Blocking request from unauthorized origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    optionsSuccessStatus: 200,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// Additional CORS headers for preflight requests
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    
+    // Only set header if origin is allowed
+    if (origin && (allowedOrigins.includes(origin) || origin === process.env.CLIENT_URL)) {
+        res.header('Access-Control-Allow-Origin', origin);
+    } else if (process.env.CLIENT_URL) {
+        // Default to configured client URL
+        res.header('Access-Control-Allow-Origin', process.env.CLIENT_URL);
+    } else {
+        // Fallback to the first allowed origin
+        res.header('Access-Control-Allow-Origin', 'https://chatpe.vercel.app');
+    }
+    
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        return res.status(200).send();
+    }
+    
+    next();
+});
 
 // Configure Cloudinary
 const cloudinaryConfig = {
@@ -116,48 +182,37 @@ const upload = multer({
     }
 });
 
-// Log all incoming request headers for debugging
+// Apply JSON parser before upload routes based on content type
 app.use((req, res, next) => {
-    console.log('=== REQUEST DEBUG ===');
-    console.log('Request URL:', req.originalUrl);
-    console.log('Request headers:', {
-        cookie: req.headers.cookie,
-        origin: req.headers.origin,
-        host: req.headers.host,
-        referer: req.headers.referer,
-        'content-type': req.headers['content-type']
-    });
-    next();
-});
-
-// Enable CORS for specific choices
-app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: true,
-    optionsSuccessStatus: 200,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
-
-// Additional CORS headers for preflight requests
-app.use((req, res, next) => {
-    // Important: This must match the origin for cookie purposes
-    res.header('Access-Control-Allow-Origin', process.env.CLIENT_URL || 'http://localhost:5173');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    const contentType = req.headers['content-type'] || '';
     
-    // Handle preflight requests
-    if (req.method === 'OPTIONS') {
-        return res.status(200).send();
+    // Skip JSON parsing for upload routes and multipart/form-data
+    if (req.originalUrl === '/upload' || 
+        req.originalUrl === '/upload-audio' || 
+        contentType.includes('multipart/form-data')) {
+        console.log('⚠️ Bypassing JSON parser for multipart request');
+        return next();
     }
     
-    next();
+    if (contentType.includes('application/json')) {
+        console.log('✅ Applying JSON parser');
+        express.json()(req, res, next);
+    } else {
+        // For other content types, use a url-encoded parser or just pass through
+        console.log('🔄 Using URL-encoded parser or passing through');
+        express.urlencoded({ extended: true })(req, res, next);
+    }
 });
 
-// CRITICAL: Set up file upload routes BEFORE JSON parser middleware
-// File upload endpoint - Needs to be BEFORE express.json middleware
+// File upload endpoint with explicit CORS handling
 app.post('/upload', (req, res) => {
+    // Ensure proper CORS headers are set for the upload route
+    const origin = req.headers.origin;
+    if (origin && (allowedOrigins.includes(origin) || origin === process.env.CLIENT_URL)) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+    }
+    
     console.log('📁 Upload route accessed');
     upload.array('file', 10)(req, res, (err) => {
         if (err) {
@@ -230,8 +285,15 @@ app.post('/upload', (req, res) => {
     });
 });
 
-// Audio recording upload endpoint - Needs to be BEFORE express.json middleware
+// Audio recording upload endpoint with explicit CORS handling
 app.post('/upload-audio', (req, res) => {
+    // Ensure proper CORS headers are set for the upload route
+    const origin = req.headers.origin;
+    if (origin && (allowedOrigins.includes(origin) || origin === process.env.CLIENT_URL)) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+    }
+    
     console.log('🎵 Audio upload route accessed');
     upload.single('audio')(req, res, (err) => {
         if (err) {
@@ -297,7 +359,7 @@ app.post('/upload-audio', (req, res) => {
     });
 });
 
-// Test endpoint to verify Cloudinary configuration - Needs to be BEFORE express.json middleware
+// Test endpoint to verify Cloudinary configuration
 app.get('/cloudinary-status', (req, res) => {
     try {
         const status = {
@@ -323,7 +385,7 @@ app.get('/cloudinary-status', (req, res) => {
     }
 });
 
-// Simple test route for file upload form - Needs to be BEFORE express.json middleware
+// Simple test route for file upload form
 app.get('/upload-test', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -375,20 +437,6 @@ app.get('/upload-test', (req, res) => {
         </body>
         </html>
     `);
-});
-
-// NOW apply JSON parser for all other routes
-app.use((req, res, next) => {
-    const contentType = req.headers['content-type'] || '';
-    
-    if (contentType.includes('application/json')) {
-        console.log('✅ Applying JSON parser');
-        express.json()(req, res, next);
-    } else {
-        // For other content types, use a url-encoded parser or just pass through
-        console.log('🔄 Using URL-encoded parser or passing through');
-        express.urlencoded({ extended: true })(req, res, next);
-    }
 });
 
 // File deletion endpoint for Cloudinary
