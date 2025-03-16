@@ -727,6 +727,40 @@ function ChatApp() {
           deletedby: user.uid // Add who deleted it
         };
         
+        // If this is a media message, delete it from Cloudinary when deleting for everyone
+        if (messageToUpdate.media && messageToUpdate.media.cloudinary_id) {
+          console.log('▶️ Deleting media from Cloudinary:', messageToUpdate.media.cloudinary_id);
+          
+          // Make sure we have a valid ID
+          let cloudinaryId = messageToUpdate.media.cloudinary_id;
+          
+          // Delete the file from Cloudinary
+          const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+          fetch(`${API_URL}/delete-file/${encodeURIComponent(cloudinaryId)}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`Server responded with ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (data.success) {
+              console.log('✅ Successfully deleted file from Cloudinary');
+            } else {
+              console.error('❌ Failed to delete file from Cloudinary:', data.error);
+            }
+          })
+          .catch(error => {
+            console.error('❌ Error deleting file from Cloudinary:', error);
+          });
+        }
+        
         // Check if this was the last message in the chat (based on local data)
         // We'll update it in both the UI and send the update to the server
         const isLastMessage = talkingToUser.messages[talkingToUser.messages.length - 1]._id === messageId;

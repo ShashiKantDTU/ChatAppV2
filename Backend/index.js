@@ -9,21 +9,26 @@ const User = require('./models/userschema');
 const message = require('./models/messageschema');
 const syncmessage = require('./models/syncmessageschema');
 const { send } = require('process');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const cookie = require('cookie-parser');
 const session = require('express-session');
 const configureSession = require('./config/session');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const bodyParser = require('body-parser');
+const multer = require('multer');
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
+});
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.CLIENT_URL || 'https://chatpe.vercel.app',
+        origin: process.env.CLIENT_URL || 'http://localhost:5173',
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
         credentials: true
     }
@@ -43,54 +48,26 @@ app.use((req, res, next) => {
         cookie: req.headers.cookie,
         origin: req.headers.origin,
         host: req.headers.host,
-        referer: req.headers.referer,
-        'content-type': req.headers['content-type']
+        referer: req.headers.referer
     });
     next();
 });
 
-// IMPORTANT: Enable CORS for all routes FIRST
-const allowedOrigins = [
-    'http://localhost:5173',
-    'https://chatpe.vercel.app'
-];
-
 // Enable CORS for specific choices
 app.use(cors({
-    origin: function(origin, callback) {
-        // Allow requests with no origin (like mobile apps, curl requests)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.CLIENT_URL === origin) {
-            callback(null, true);
-        } else {
-            console.warn(`⚠️ CORS: Blocking request from unauthorized origin: ${origin}`);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
     optionsSuccessStatus: 200,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Request-Method', 'Access-Control-Request-Headers']
 }));
 
 // Additional CORS headers for preflight requests
 app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    
-    // Only set header if origin is allowed
-    if (origin && (allowedOrigins.includes(origin) || origin === process.env.CLIENT_URL)) {
-        res.header('Access-Control-Allow-Origin', origin);
-    } else if (process.env.CLIENT_URL) {
-        // Default to configured client URL
-        res.header('Access-Control-Allow-Origin', process.env.CLIENT_URL);
-    } else {
-        // Fallback to the first allowed origin
-        res.header('Access-Control-Allow-Origin', 'https://chatpe.vercel.app');
-    }
-    
+    // Important: This must match the origin for cookie purposes
+    res.header('Access-Control-Allow-Origin', process.env.CLIENT_URL || 'http://localhost:5173');
     res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Access-Control-Allow-Origin');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     
     // Handle preflight requests
@@ -101,48 +78,57 @@ app.use((req, res, next) => {
     next();
 });
 
-// Configure Cloudinary
-const cloudinaryConfig = {
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-};
+// Middleware for routes
+app.use(router);
 
-// Validate Cloudinary configuration
-if (!cloudinaryConfig.cloud_name || !cloudinaryConfig.api_key || !cloudinaryConfig.api_secret) {
-    console.error('⚠️ WARNING: Missing Cloudinary credentials in environment variables!');
-    console.error('File uploads will fail. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET');
-} else {
-    console.log('✅ Cloudinary configuration found');
-}
-
-// Configure Cloudinary with the validated config
-cloudinary.config(cloudinaryConfig);
-
-// Log Cloudinary configuration status
-console.log('Cloudinary configuration status:');
-console.log(`- Cloud name: ${cloudinaryConfig.cloud_name ? 'Configured ✅' : 'Missing ❌'}`);
-console.log(`- API key: ${cloudinaryConfig.api_key ? 'Configured ✅' : 'Missing ❌'}`);
-console.log(`- API secret: ${cloudinaryConfig.api_secret ? 'Configured ✅' : 'Missing ❌'}`);
-
-// Configure Cloudinary storage for multer with error handling
+// Configure Cloudinary storage
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
-        folder: 'chat-app-uploads',
+        folder: 'chat_uploads',
         resource_type: 'auto',
-        // Use a callback to determine resource type based on file
         format: (req, file) => {
-            console.log('Determining format for file:', file.originalname);
-            // Extract extension from original filename
-            const extension = file.originalname.split('.').pop().toLowerCase();
-            console.log('File extension:', extension);
-            return extension;
-        }
+            // We want to preserve original extension when possible
+            // Extract extension from mimetype
+            const extension = file.mimetype.split('/')[1];
+            return extension || 'raw'; // Default to raw if no extension
+        },
+        public_id: (req, file) => {
+            // Create a unique ID for each file
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            // Remove extension from original name to avoid double extensions
+            const nameWithoutExt = file.originalname.replace(/\.[^/.]+$/, "");
+            // Return sanitized filename with unique suffix
+            return `${nameWithoutExt.replace(/[^a-zA-Z0-9]/g, '_')}_${uniqueSuffix}`;
+        },
+        // Allowed formats remains the same
+        allowed_formats: [
+            // Images
+            'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff',
+            // Videos
+            'mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv',
+            // Audio
+            'mp3', 'wav', 'ogg', 'midi', 'aac', 'flac',
+            // Documents
+            'pdf', 'doc', 'docx',
+            // Spreadsheets
+            'xls', 'xlsx',
+            // Presentations
+            'ppt', 'pptx',
+            // Archives
+            'zip', 'rar', '7z', 'tar',
+            // Text files
+            'txt', 'csv', 'html', 'css', 'js',
+            // Code files
+            'json', 'xml', 'yaml', 'py'
+        ],
+        // Image transformations
+        transformation: [
+            { quality: 'auto' },
+            { fetch_format: 'auto' }
+        ]
     }
 });
-
-console.log('CloudinaryStorage configured');
 
 const upload = multer({
     storage: storage,
@@ -182,277 +168,130 @@ const upload = multer({
     }
 });
 
-// Apply JSON parser before upload routes based on content type
-app.use((req, res, next) => {
-    const contentType = req.headers['content-type'] || '';
+// File upload endpoint
+app.post('/upload', (req, res, next) => {
+    console.log('📁 Upload request received');
+    console.log('📁 Headers:', req.headers);
+    console.log('📁 Files count in request:', req.files?.length || 'No files yet');
     
-    // Skip JSON parsing for upload routes and multipart/form-data
-    if (req.originalUrl === '/upload' || 
-        req.originalUrl === '/upload-audio' || 
-        contentType.includes('multipart/form-data')) {
-        console.log('⚠️ Bypassing JSON parser for multipart request');
-        return next();
-    }
-    
-    if (contentType.includes('application/json')) {
-        console.log('✅ Applying JSON parser');
-        express.json()(req, res, next);
-    } else {
-        // For other content types, use a url-encoded parser or just pass through
-        console.log('🔄 Using URL-encoded parser or passing through');
-        express.urlencoded({ extended: true })(req, res, next);
-    }
-});
-
-// File upload endpoint with explicit CORS handling
-app.post('/upload', (req, res) => {
-    // Ensure proper CORS headers are set for the upload route
-    const origin = req.headers.origin;
-    if (origin && (allowedOrigins.includes(origin) || origin === process.env.CLIENT_URL)) {
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Access-Control-Allow-Credentials', 'true');
-    }
-    
-    console.log('📁 Upload route accessed');
+    // Continue with multer processing
     upload.array('file', 10)(req, res, (err) => {
         if (err) {
-            console.error('❌ Upload error:', err);
-            if (err instanceof multer.MulterError) {
-                return res.status(400).json({
-                    success: false,
-                    error: `File upload error: ${err.message}`,
-                    code: err.code
-                });
-            } else {
-                return res.status(500).json({
-                    success: false,
-                    error: err.message || 'Unknown upload error'
-                });
-            }
+            console.error('❌ Multer error:', err);
+            return res.status(400).json({
+                success: false,
+                error: err.message
+            });
         }
         
+        console.log('📁 Multer processing complete');
+        console.log('📁 Files received:', req.files?.length || 0);
+        
         try {
-            console.log('✅ Upload successful');
-            
             if (!req.files || req.files.length === 0) {
-                console.error('⚠️ No files in request');
                 throw new Error('No files uploaded');
             }
 
-            console.log(`📄 Processing ${req.files.length} uploaded files`);
+            console.log('📁 Processing files from Cloudinary...');
             
-            // Handle multiple files
-            const files = req.files.map(file => {
-                console.log('File details:', {
+            // Handle multiple files with Cloudinary URLs
+            const files = req.files.map((file, index) => {
+                console.log(`📁 Processing file ${index + 1}:`, {
+                    originalname: file.originalname,
                     path: file.path,
-                    filename: file.originalname,
                     size: file.size,
-                    mimetype: file.mimetype,
-                    cloudinaryId: file.public_id || file.filename
+                    mimetype: file.mimetype
                 });
                 
+                // Extract the public_id correctly from the Cloudinary response
+                // The path contains the full URL, but we need just the public_id for deletion
+                let public_id = file.filename;
+                
+                // If Cloudinary returns a public_id directly, use that
+                if (file.public_id) {
+                    public_id = file.public_id;
+                    console.log(`📁 Using direct public_id: ${public_id}`);
+                } 
+                // Otherwise try to extract it from the path
+                else if (file.path) {
+                    try {
+                        // Parse the URL to extract public_id 
+                        // Cloudinary URLs have a format like: 
+                        // https://res.cloudinary.com/cloud_name/resource_type/upload/v12345/folder/public_id.ext
+                        const urlParts = file.path.split('/');
+                        // The public_id is usually the last part without extension
+                        const lastPart = urlParts[urlParts.length - 1];
+                        const fileId = lastPart.split('.')[0]; // Remove extension
+                        
+                        // If we have a folder structure, include it
+                        const folderMatch = file.path.match(/\/([^\/]+)\/([^\/]+)$/);
+                        if (folderMatch && folderMatch[1] !== 'upload') {
+                            public_id = `${folderMatch[1]}/${fileId}`;
+                            console.log(`📁 Extracted public_id with folder: ${public_id}`);
+                        } else {
+                            public_id = fileId;
+                            console.log(`📁 Extracted public_id without folder: ${public_id}`);
+                        }
+                    } catch (error) {
+                        console.error('❌ Error extracting public_id from path:', error);
+                    }
+                }
+                
                 return {
-                    url: file.path, // Cloudinary returns the URL in the path property
+                    url: file.path, // Cloudinary returns the full URL in the path property
                     filename: file.originalname,
                     size: file.size,
                     mimeType: file.mimetype,
-                    public_id: file.public_id || file.filename // Store Cloudinary's public_id for potential deletion later
+                    public_id: public_id // Store the extracted public_id
                 };
             });
 
-            console.log('📤 Sending response with file details');
+            console.log('📁 All files processed, sending response');
+            
             res.json({
                 success: true,
                 files: files
             });
         } catch (error) {
-            console.error('❌ Error processing upload:', error);
-            
-            // Check if this is a Cloudinary error
-            if (error.http_code) {
-                console.error('Cloudinary error:', error);
-                return res.status(error.http_code).json({
-                    success: false,
-                    error: `Cloudinary error: ${error.message}`
-                });
-            }
-            
+            console.error('❌ Upload error:', error);
             res.status(400).json({
                 success: false,
-                error: error.message || 'Unknown upload error'
+                error: error.message
             });
         }
     });
 });
 
-// Audio recording upload endpoint with explicit CORS handling
-app.post('/upload-audio', (req, res) => {
-    // Ensure proper CORS headers are set for the upload route
-    const origin = req.headers.origin;
-    if (origin && (allowedOrigins.includes(origin) || origin === process.env.CLIENT_URL)) {
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Access-Control-Allow-Credentials', 'true');
-    }
-    
-    console.log('🎵 Audio upload route accessed');
-    upload.single('audio')(req, res, (err) => {
-        if (err) {
-            console.error('❌ Audio upload error:', err);
-            if (err instanceof multer.MulterError) {
-                return res.status(400).json({
-                    success: false,
-                    error: `Audio upload error: ${err.message}`,
-                    code: err.code
-                });
-            } else {
-                return res.status(500).json({
-                    success: false,
-                    error: err.message || 'Unknown audio upload error'
-                });
-            }
-        }
-        
-        try {
-            console.log('✅ Audio upload successful');
-            
-            if (!req.file) {
-                console.error('⚠️ No audio file in request');
-                throw new Error('No audio file uploaded');
-            }
-
-            console.log('🎵 Audio file details:', {
-                path: req.file.path,
-                filename: req.file.originalname || 'voice-message.webm',
-                size: req.file.size,
-                mimetype: req.file.mimetype,
-                cloudinaryId: req.file.public_id || req.file.filename
-            });
-
-            // Return the Cloudinary URL and file details
-            res.json({
-                success: true,
-                file: {
-                    url: req.file.path,
-                    filename: req.file.originalname || 'voice-message.webm',
-                    size: req.file.size,
-                    mimeType: req.file.mimetype,
-                    public_id: req.file.public_id || req.file.filename
-                }
-            });
-        } catch (error) {
-            console.error('❌ Error processing audio upload:', error);
-            
-            // Check if this is a Cloudinary error
-            if (error.http_code) {
-                console.error('Cloudinary error:', error);
-                return res.status(error.http_code).json({
-                    success: false,
-                    error: `Cloudinary error: ${error.message}`
-                });
-            }
-            
-            res.status(400).json({
-                success: false,
-                error: error.message || 'Unknown audio upload error'
-            });
-        }
-    });
-});
-
-// Test endpoint to verify Cloudinary configuration
-app.get('/cloudinary-status', (req, res) => {
+// Add endpoint to delete a file from Cloudinary
+app.delete('/delete-file/:publicId', async (req, res) => {
     try {
-        const status = {
-            configured: !!(process.env.CLOUDINARY_CLOUD_NAME && 
-                          process.env.CLOUDINARY_API_KEY && 
-                          process.env.CLOUDINARY_API_SECRET),
-            cloudName: process.env.CLOUDINARY_CLOUD_NAME ? 
-                      process.env.CLOUDINARY_CLOUD_NAME : 'Not configured',
-            apiKeyConfigured: !!process.env.CLOUDINARY_API_KEY,
-            apiSecretConfigured: !!process.env.CLOUDINARY_API_SECRET
-        };
-        
-        res.json({
-            success: true,
-            status: status
-        });
-    } catch (error) {
-        console.error('Error checking Cloudinary status:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to check Cloudinary configuration'
-        });
-    }
-});
-
-// Simple test route for file upload form
-app.get('/upload-test', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Cloudinary Upload Test</title>
-            <style>
-                body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-                h1 { color: #333; }
-                form { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
-                input[type="file"] { margin: 10px 0; }
-                button { background: #4CAF50; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
-                button:hover { background: #45a049; }
-                pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow: auto; }
-            </style>
-        </head>
-        <body>
-            <h1>Cloudinary Upload Test</h1>
-            <p>Use this form to test file uploads to Cloudinary</p>
-            
-            <form action="/upload" method="post" enctype="multipart/form-data">
-                <h2>Test File Upload</h2>
-                <input type="file" name="file" multiple />
-                <button type="submit">Upload Files</button>
-            </form>
-            
-            <form action="/upload-audio" method="post" enctype="multipart/form-data">
-                <h2>Test Audio Upload</h2>
-                <input type="file" name="audio" accept="audio/*" />
-                <button type="submit">Upload Audio</button>
-            </form>
-            
-            <div>
-                <h2>Cloudinary Configuration Status</h2>
-                <pre id="status">Loading...</pre>
-            </div>
-            
-            <script>
-                // Fetch Cloudinary status
-                fetch('/cloudinary-status')
-                    .then(response => response.json())
-                    .then(data => {
-                        document.getElementById('status').textContent = JSON.stringify(data, null, 2);
-                    })
-                    .catch(error => {
-                        document.getElementById('status').textContent = 'Error fetching status: ' + error.message;
-                    });
-            </script>
-        </body>
-        </html>
-    `);
-});
-
-// File deletion endpoint for Cloudinary
-app.delete('/delete-file', async (req, res) => {
-    try {
-        const { public_id } = req.body;
-        
-        if (!public_id) {
+        let publicId = req.params.publicId;
+        if (!publicId) {
             return res.status(400).json({
                 success: false,
-                error: 'No public_id provided'
+                error: 'No public ID provided'
             });
         }
 
-        // Delete the file from Cloudinary
-        const result = await cloudinary.uploader.destroy(public_id);
+        console.log('Deleting file from Cloudinary with ID:', publicId);
+
+        // Check if the public_id includes file extension and remove it
+        if (publicId.includes('.')) {
+            publicId = publicId.split('.')[0];
+        }
+        
+        // Handle potential folder path in public_id
+        // If the id doesn't already include the folder, add it
+        if (!publicId.includes('chat_uploads/') && publicId.indexOf('/') === -1) {
+            publicId = `chat_uploads/${publicId}`;
+        }
+        
+        console.log('Formatted public_id for deletion:', publicId);
+
+        // Delete file from Cloudinary
+        const result = await cloudinary.uploader.destroy(publicId);
+        
+        console.log('Cloudinary delete result:', result);
         
         if (result.result === 'ok') {
             res.json({
@@ -460,37 +299,15 @@ app.delete('/delete-file', async (req, res) => {
                 message: 'File deleted successfully'
             });
         } else {
-            throw new Error('Failed to delete file from Cloudinary');
+            throw new Error(`Failed to delete file from Cloudinary: ${result.result}`);
         }
     } catch (error) {
-        console.error('File deletion error:', error);
+        console.error('Cloudinary delete error:', error);
         res.status(500).json({
             success: false,
             error: error.message
         });
     }
-});
-
-// Middleware for routes AFTER file upload endpoints
-app.use(router);
-
-// Add a middleware to catch multer errors
-app.use((err, req, res, next) => {
-    if (err instanceof multer.MulterError) {
-        console.error('Multer error caught in middleware:', err);
-        return res.status(400).json({
-            success: false,
-            error: `File upload error: ${err.message}`,
-            code: err.code
-        });
-    } else if (err) {
-        console.error('Non-multer error caught in middleware:', err);
-        return res.status(500).json({
-            success: false,
-            error: err.message || 'Unknown server error'
-        });
-    }
-    next();
 });
 
 // Socket.io connection handling
@@ -787,18 +604,6 @@ io.on('connection', (socket) => {
             }
 
             console.log("✅ Updated Message in DB:", updatedMessage);
-
-            // If this is a delete-for-everyone operation and the message has media, delete the file from Cloudinary
-            if (isDeleteForEveryone && updatedMessage.media && updatedMessage.media.public_id) {
-                try {
-                    console.log("🗑️ Deleting media file from Cloudinary:", updatedMessage.media.public_id);
-                    await cloudinary.uploader.destroy(updatedMessage.media.public_id);
-                    console.log("✅ Media file deleted from Cloudinary");
-                } catch (cloudinaryError) {
-                    console.error("❌ Error deleting file from Cloudinary:", cloudinaryError);
-                    // Continue with the message update even if file deletion fails
-                }
-            }
 
             // Identify sender and receiver
             const messagesender = await User.findOne({ uid: updatedMessage.senderid });

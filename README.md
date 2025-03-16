@@ -121,23 +121,7 @@ Ensure these environment variables are set in your Render dashboard:
 - `GOOGLE_CLIENT_SECRET`: your Google OAuth client secret
 - `JWT_SECRET`: a strong secret key for JWT tokens
 - `MongoURI`: your MongoDB connection string
-- Cloudinary credentials:
-  - `CLOUDINARY_CLOUD_NAME`: your Cloudinary cloud name
-  - `CLOUDINARY_API_KEY`: your Cloudinary API key
-  - `CLOUDINARY_API_SECRET`: your Cloudinary API secret
-
-## Cloudinary Setup
-
-This application uses Cloudinary for file storage. To set up Cloudinary:
-
-1. Create a free account at [Cloudinary](https://cloudinary.com/)
-2. From your Cloudinary dashboard, get your cloud name, API key, and API secret
-3. Add these credentials to your environment variables:
-   - `CLOUDINARY_CLOUD_NAME`
-   - `CLOUDINARY_API_KEY`
-   - `CLOUDINARY_API_SECRET`
-4. Files uploaded through the chat will be stored in your Cloudinary account in the 'chat-app-uploads' folder
-5. Files are automatically deleted from Cloudinary when messages are deleted by all users
+- Cloudinary credentials (if using Cloudinary)
 
 ## Frontend Configuration
 
