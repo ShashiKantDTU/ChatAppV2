@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { User, Lock, Eye, EyeOff } from "lucide-react"; 
 import "./login.css";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import GoogleAuth from '../components/GoogleAuth';
 
 const DarkLoginForm = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [formData, setFormData] = useState({
         email: "",
         password: "",
@@ -15,6 +16,44 @@ const DarkLoginForm = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
+    const [authMessage, setAuthMessage] = useState(null);
+
+    // Check URL for token from Google OAuth redirect
+    useEffect(() => {
+        // Look for token in URL hash fragment
+        if (location.hash && location.hash.includes('token=')) {
+            try {
+                const tokenMatch = location.hash.match(/token=([^&]+)/);
+                if (tokenMatch && tokenMatch[1]) {
+                    const token = decodeURIComponent(tokenMatch[1]);
+                    console.log('Found token in URL hash fragment');
+                    
+                    // Store token in localStorage
+                    localStorage.setItem('auth_token', token);
+                    
+                    // Check query params for Google auth source
+                    const isGoogleAuth = location.search.includes('auth_source=google');
+                    if (isGoogleAuth) {
+                        setAuthMessage('Successfully logged in with Google!');
+                    }
+                    
+                    // Clear the hash from URL without page reload
+                    window.history.replaceState(
+                        null, 
+                        document.title, 
+                        location.pathname + location.search
+                    );
+                    
+                    // Redirect to home after short delay
+                    setTimeout(() => {
+                        navigate('/');
+                    }, 1500);
+                }
+            } catch (err) {
+                console.error('Error processing auth token from URL:', err);
+            }
+        }
+    }, [location, navigate]);
 
     const validateForm = () => {
         const newErrors = {};
@@ -106,6 +145,12 @@ const DarkLoginForm = () => {
                     <span>Welcome Back</span>
                 </h1>
                 <p className="form-subtitle">Please enter your details</p>
+
+                {authMessage && (
+                    <div className="auth-message success">
+                        {authMessage}
+                    </div>
+                )}
 
                 <form onSubmit={handleSubmit}>
                     <div className={`input-group ${errors.email ? "error" : ""}`}>

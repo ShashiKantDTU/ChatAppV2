@@ -14,26 +14,36 @@ const GoogleAuth = ({ isDisabled = false, loginCallback = null }) => {
     // Check if we just returned from Google Auth
     const searchParams = new URLSearchParams(window.location.search);
     const authSource = searchParams.get('auth_source');
-    const tokenFromUrl = searchParams.get('token');
+    const authSuccess = searchParams.get('auth_success');
     
-    // If we have a token in the URL, store it and use it
-    if (tokenFromUrl) {
-      console.log('Token received from URL, storing in localStorage');
-      localStorage.setItem('auth_token', tokenFromUrl);
+    // Check for token in URL fragment
+    let tokenFromFragment = null;
+    if (window.location.hash && window.location.hash.includes('token=')) {
+      const tokenMatch = window.location.hash.match(/token=([^&]+)/);
+      if (tokenMatch && tokenMatch[1]) {
+        tokenFromFragment = decodeURIComponent(tokenMatch[1]);
+        console.log('Found token in URL hash fragment in GoogleAuth component');
+      }
+    }
+    
+    // Prioritize fragment token over URL param token
+    if (tokenFromFragment) {
+      console.log('Token received from URL fragment, storing in localStorage');
+      localStorage.setItem('auth_token', tokenFromFragment);
       
-      // Clean up URL - but preserve auth_source for state management
-      const newUrl = window.location.pathname + '?auth_source=google';
-      window.history.replaceState({}, document.title, newUrl);
+      // Clean up URL fragment - but preserve auth_source for state management
+      window.history.replaceState(
+        null, 
+        document.title, 
+        window.location.pathname + (authSource ? `?auth_source=${authSource}` : '')
+      );
       
       // Try to use the token immediately
       checkAuthStatus();
     }
-    // If we just returned from Google OAuth flow but no token in URL
-    else if (authSource === 'google') {
+    // If we just returned from Google OAuth flow but need to check auth
+    else if (authSuccess === 'true' || authSource === 'google') {
       console.log('Returned from Google Auth, checking authentication...');
-      // Clean up URL
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, newUrl);
       
       // Attempt to fetch user data
       checkAuthStatus();

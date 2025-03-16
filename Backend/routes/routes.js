@@ -130,37 +130,16 @@ router.get('/auth/google/callback',
         // Log final response headers after setting cookies
         console.log('Response headers after setting cookie:', res.getHeaders());
 
-        // ✅ Redirect to frontend with the stored return URL instead of default 
-        // Include token in the URL as a fallback mechanism
-        const redirectUrlWithToken = returnUrl.includes('?') 
-            ? `${returnUrl}&token=${encodeURIComponent(token)}` 
-            : `${returnUrl}?token=${encodeURIComponent(token)}`;
+        // MODIFIED APPROACH: Send JSON with token instead of HTML
+        // Include token directly in the URL as a fragment identifier (#)
+        // Fragments (#) are not sent to the server but accessible by client JavaScript
+        const tokenFragment = encodeURIComponent(token);
+        const redirectUrl = returnUrl.includes('?') 
+            ? `${returnUrl}&auth_success=true#token=${tokenFragment}` 
+            : `${returnUrl}?auth_success=true#token=${tokenFragment}`;
             
-        // As a fallback, set the token in localStorage directly
-        // Create a simple HTML page that sets localStorage and redirects
-        const html = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Authenticating...</title>
-            <script>
-              // Store the token in localStorage
-              localStorage.setItem("auth_token", "${token}");
-              console.log("Token set in localStorage by auth page");
-              
-              // Redirect to the app
-              window.location.href = "${returnUrl}";
-            </script>
-          </head>
-          <body>
-            <p>Authenticating, please wait...</p>
-          </body>
-        </html>
-        `;
-            
-        console.log(`Sending authentication page with localStorage fallback`);
-        res.setHeader('Content-Type', 'text/html');
-        return res.send(html);
+        console.log(`Redirecting to: ${redirectUrl}`);
+        return res.redirect(redirectUrl);
     }
 );
 

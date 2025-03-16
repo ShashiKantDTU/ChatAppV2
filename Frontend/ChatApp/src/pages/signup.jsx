@@ -1,14 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { User, Mail, Lock, CheckCircle, Eye, EyeOff } from "lucide-react";
 import "./signup.css";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import GoogleAuth from '../components/GoogleAuth';
 
 const DarkSignupForm = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [authMessage, setAuthMessage] = useState(null);
 
   const [formData, setFormData] = useState({
     username: "",
@@ -22,6 +24,44 @@ const DarkSignupForm = () => {
 
   // State to show success message on submission
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Check URL for token from Google OAuth redirect
+  useEffect(() => {
+    // Look for token in URL hash fragment
+    if (location.hash && location.hash.includes('token=')) {
+      try {
+        const tokenMatch = location.hash.match(/token=([^&]+)/);
+        if (tokenMatch && tokenMatch[1]) {
+          const token = decodeURIComponent(tokenMatch[1]);
+          console.log('Found token in URL hash fragment');
+          
+          // Store token in localStorage
+          localStorage.setItem('auth_token', token);
+          
+          // Check query params for Google auth source
+          const isGoogleAuth = location.search.includes('auth_source=google');
+          if (isGoogleAuth) {
+            setAuthMessage('Successfully signed up with Google!');
+          }
+          
+          // Clear the hash from URL without page reload
+          window.history.replaceState(
+            null, 
+            document.title, 
+            location.pathname + location.search
+          );
+          
+          // Show success message and redirect
+          setIsSubmitted(true);
+          setTimeout(() => {
+            navigate('/');
+          }, 1500);
+        }
+      } catch (err) {
+        console.error('Error processing auth token from URL:', err);
+      }
+    }
+  }, [location, navigate]);
 
   // This function will be called if Google login succeeds
   const handleGoogleLoginSuccess = (userData) => {
@@ -120,7 +160,9 @@ const DarkSignupForm = () => {
           <div className="success-overlay">
             <div className="success-content">
               <CheckCircle size={64} className="success-icon" />
-              <h2 className="success-message">Registration Successful!</h2>
+              <h2 className="success-message">
+                {authMessage || "Registration Successful!"}
+              </h2>
             </div>
           </div>
         )}
