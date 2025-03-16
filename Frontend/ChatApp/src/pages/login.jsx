@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { User, Lock, LogIn, Eye, EyeOff } from "lucide-react"; // Added Eye icons <sup data-citation="3" className="inline select-none [&>a]:rounded-2xl [&>a]:border [&>a]:px-1.5 [&>a]:py-0.5 [&>a]:transition-colors shadow [&>a]:bg-ds-bg-subtle [&>a]:text-xs [&>svg]:w-4 [&>svg]:h-4 relative -top-[2px] citation-shimmer"><a href="https://bootstrapfriendly.com/blog/login-form-with-password-show-and-hide-button-using-javascript">3</a></sup>
+import React, { useState, useEffect } from "react";
+import { User, Lock, Eye, EyeOff } from "lucide-react"; 
 import "./login.css";
 import { useNavigate } from "react-router-dom";
+import GoogleAuth from '../components/GoogleAuth';
 
 const DarkLoginForm = () => {
     const navigate = useNavigate();
@@ -22,6 +23,12 @@ const DarkLoginForm = () => {
             newErrors.password = "Password must be at least 8 characters long!";
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
+    };
+
+    // This function will be called if Google login succeeds
+    const handleGoogleLoginSuccess = (userData) => {
+        console.log('Google login successful:', userData);
+        navigate('/');
     };
 
     const handleSubmit = async (e) => {
@@ -78,11 +85,6 @@ const DarkLoginForm = () => {
             ...prevState,
             [name]: type === 'checkbox' ? checked : value
         }));
-    };
-
-    const handleGoogleLogin = () => {
-        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-        window.location.href = `${API_URL}/auth/google`;
     };
 
     const togglePasswordVisibility = () => {
@@ -164,15 +166,12 @@ const DarkLoginForm = () => {
                 <div className="divider">
                     <span>OR</span>
                 </div>
-
-                <button 
-                    className="google-login-button" 
-                    onClick={handleGoogleLogin}
-                    disabled={isLoading}
-                >
-                    <LogIn size={20} className="google-icon" />
-                    Continue with Google
-                </button>
+                
+                {/* Replace with our new GoogleAuth component */}
+                <GoogleAuth 
+                    isDisabled={isLoading}
+                    loginCallback={handleGoogleLoginSuccess}
+                />
 
                 <div className="footer-text">
                     Don't have an account? <a href="/signup">Sign up</a>

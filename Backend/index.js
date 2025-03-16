@@ -13,6 +13,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const cookie = require('cookie-parser');
+const session = require('express-session');
+const configureSession = require('./config/session');
 
 const app = express();
 const server = http.createServer(app);
@@ -26,6 +28,9 @@ const io = new Server(server, {
 
 // Add cookie parser middleware BEFORE routes
 app.use(cookie());
+
+// Add session support for OAuth state
+app.use(configureSession());
 
 // Log all incoming request headers for debugging
 app.use((req, res, next) => {

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { User, Mail, Lock, CheckCircle, LogIn, Eye, EyeOff } from "lucide-react";
+import { User, Mail, Lock, CheckCircle, Eye, EyeOff } from "lucide-react";
 import "./signup.css";
 import { useNavigate } from "react-router-dom";
+import GoogleAuth from '../components/GoogleAuth';
 
 const DarkSignupForm = () => {
   const navigate = useNavigate();
@@ -21,6 +22,12 @@ const DarkSignupForm = () => {
 
   // State to show success message on submission
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // This function will be called if Google login succeeds
+  const handleGoogleLoginSuccess = (userData) => {
+    console.log('Google login successful:', userData);
+    navigate('/');
+  };
 
   // Handle form validation
   const validateForm = () => {
@@ -96,11 +103,6 @@ const DarkSignupForm = () => {
       ...prevState,
       [name]: value,
     }));
-  };
-
-  const handleGoogleLogin = () => {
-    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-    window.location.href = `${API_URL}/auth/google`;
   };
 
   return (
@@ -229,14 +231,11 @@ const DarkSignupForm = () => {
           <span>OR</span>
         </div>
 
-        <button 
-          className="google-login-button" 
-          onClick={handleGoogleLogin}
-          disabled={isLoading}
-        >
-          <LogIn size={20} className="google-icon" />
-          Continue with Google
-        </button>
+        {/* Replace with our new GoogleAuth component */}
+        <GoogleAuth 
+          isDisabled={isLoading}
+          loginCallback={handleGoogleLoginSuccess}
+        />
 
         <div className="footer-text">
           Already have an account? <a href="/login">Sign in</a>

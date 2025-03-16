@@ -33,7 +33,21 @@ passport.use(new GoogleStrategy({
 
 // ✅ Google Login Route
 router.get('/auth/google',
-    passport.authenticate('google', { scope: ['profile', 'email'] })
+    (req, res, next) => {
+        // Store return URL in session if provided
+        const returnUrl = req.query.return_url;
+        if (returnUrl) {
+            req.session = req.session || {};
+            req.session.returnUrl = returnUrl;
+            console.log('Storing return URL for OAuth:', returnUrl);
+        }
+        next();
+    },
+    passport.authenticate('google', { 
+        scope: ['profile', 'email'],
+        // Pass any return URL as state to be restored after auth
+        state: req.query.return_url || ''
+    })
 );
 
 // ✅ Google OAuth Callback
@@ -43,8 +57,12 @@ router.get('/auth/google/callback',
         const user = req.user;
         const email = user.email;
         const name = user.name;
+        // Get return URL from state or session
+        const returnUrl = req.query.state || (req.session && req.session.returnUrl) || CLIENT_URL;
 
         console.log('Generating JWT token for user:', user);
+        console.log('Return URL after auth:', returnUrl);
+
         // ✅ Generate JWT token
         const token = jwt.sign({ email:user.email, name: user.displayName }, process.env.JWT_SECRET);
 
@@ -112,9 +130,9 @@ router.get('/auth/google/callback',
         // Log final response headers after setting cookies
         console.log('Response headers after setting cookie:', res.getHeaders());
 
-        // ✅ Redirect to frontend
-        console.log(`Redirecting to: ${CLIENT_URL}`);
-        res.redirect(CLIENT_URL);
+        // ✅ Redirect to frontend with the stored return URL instead of default
+        console.log(`Redirecting to: ${returnUrl}`);
+        res.redirect(returnUrl);
     }
 );
 
