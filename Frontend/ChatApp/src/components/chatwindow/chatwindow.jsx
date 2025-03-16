@@ -321,11 +321,18 @@ const ChatWindow = (props) => {
                     `File(${pair[1].name}, ${pair[1].type}, ${pair[1].size} bytes)` : 
                     pair[1]));
             }
+
+            // Log the FormData object details
+            console.log('FormData object details:', {
+                constructorName: formData.constructor.name,
+                toString: formData.toString(),
+                prototype: Object.getPrototypeOf(formData).constructor.name
+            });
             
             // IMPORTANT: Don't manually set Content-Type when using FormData
             // The browser will automatically set the correct multipart/form-data
             // Content-Type with the proper boundary
-            const response = await fetch(`${API_URL}/upload`, {
+            const fetchOptions = {
                 method: 'POST',
                 body: formData,
                 credentials: 'include', // Include credentials if needed for authentication
@@ -336,7 +343,18 @@ const ChatWindow = (props) => {
                         'Authorization': `Bearer ${localStorage.getItem('token')}`
                     } : {})
                 }
+            };
+
+            console.log('Fetch options:', {
+                method: fetchOptions.method,
+                bodyType: typeof fetchOptions.body,
+                bodyIsFormData: fetchOptions.body instanceof FormData || 
+                               fetchOptions.body.toString() === '[object FormData]',
+                credentials: fetchOptions.credentials,
+                headers: fetchOptions.headers
             });
+            
+            const response = await fetch(`${API_URL}/upload`, fetchOptions);
 
             // Log response details for debugging
             console.log('Upload response status:', response.status);
@@ -354,6 +372,14 @@ const ChatWindow = (props) => {
                     console.error('Upload error details:', errorData);
                 } catch (jsonError) {
                     console.error('Could not parse error response:', jsonError);
+                    // Try to get text content as fallback
+                    try {
+                        const textError = await response.text();
+                        console.error('Error response text:', textError);
+                        if (textError) errorMessage += `: ${textError}`;
+                    } catch (textError) {
+                        console.error('Could not get response text:', textError);
+                    }
                 }
                 throw new Error(errorMessage);
             }
@@ -745,6 +771,11 @@ const ChatWindow = (props) => {
         setUploadProgress(0);
 
         try {
+            console.log('Creating FormData for audio upload with blob:', {
+                blobType: audioBlob.type,
+                blobSize: audioBlob.size
+            });
+            
             const formData = new FormData();
             formData.append('file', audioBlob, 'audio.webm');
             
@@ -756,11 +787,21 @@ const ChatWindow = (props) => {
                     pair[1]));
             }
 
+            // Log the FormData object details
+            console.log('FormData object details:', {
+                constructorName: formData.constructor.name,
+                toString: formData.toString(),
+                prototype: Object.getPrototypeOf(formData).constructor.name
+            });
+
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-            const response = await fetch(`${API_URL}/upload`, {
+            console.log('Sending audio upload to:', `${API_URL}/upload`);
+            
+            // Build a request object without using the global fetch override initially
+            const fetchOptions = {
                 method: 'POST',
                 body: formData,
-                credentials: 'include', // Include credentials if needed
+                credentials: 'include',
                 // Explicitly do NOT set Content-Type when using FormData
                 headers: {
                     // Include Authorization header if needed
@@ -768,7 +809,17 @@ const ChatWindow = (props) => {
                         'Authorization': `Bearer ${localStorage.getItem('token')}`
                     } : {})
                 }
+            };
+            
+            console.log('Fetch options:', {
+                method: fetchOptions.method,
+                bodyType: typeof fetchOptions.body,
+                bodyIsFormData: fetchOptions.body instanceof FormData || fetchOptions.body.toString() === '[object FormData]',
+                credentials: fetchOptions.credentials,
+                headers: fetchOptions.headers
             });
+            
+            const response = await fetch(`${API_URL}/upload`, fetchOptions);
             
             // Log response details for debugging
             console.log('Audio upload response status:', response.status);
@@ -786,6 +837,14 @@ const ChatWindow = (props) => {
                     console.error('Audio upload error details:', errorData);
                 } catch (jsonError) {
                     console.error('Could not parse error response:', jsonError);
+                    // Try to get text content as fallback
+                    try {
+                        const textError = await response.text();
+                        console.error('Error response text:', textError);
+                        if (textError) errorMessage += `: ${textError}`;
+                    } catch (textError) {
+                        console.error('Could not get response text:', textError);
+                    }
                 }
                 throw new Error(errorMessage);
             }
