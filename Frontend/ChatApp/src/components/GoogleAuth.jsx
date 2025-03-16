@@ -14,8 +14,25 @@ const GoogleAuth = ({ isDisabled = false, loginCallback = null }) => {
     // Check if we just returned from Google Auth
     const searchParams = new URLSearchParams(window.location.search);
     const authSource = searchParams.get('auth_source');
+    const tokenFromUrl = searchParams.get('token');
     
-    if (authSource === 'google') {
+    // If we have a token in the URL, store it and use it
+    if (tokenFromUrl) {
+      console.log('Token received from URL, storing in localStorage');
+      localStorage.setItem('auth_token', tokenFromUrl);
+      
+      // Clean up URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+      
+      // Try to use the token
+      if (loginCallback) {
+        // Here we can use a minimal payload since a proper /me call will happen later
+        loginCallback({ tokenFound: true });
+      }
+    }
+    // If we just returned from Google OAuth flow
+    else if (authSource === 'google') {
       console.log('Returned from Google Auth, checking authentication...');
       // Clean up URL
       const newUrl = window.location.pathname;
@@ -30,13 +47,21 @@ const GoogleAuth = ({ isDisabled = false, loginCallback = null }) => {
   const checkAuthStatus = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const token = localStorage.getItem('auth_token');
+      const headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      };
+      
+      // If we have a token in localStorage, add it to the headers
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch(`${API_URL}/me`, {
         method: 'GET',
         credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        }
+        headers: headers
       });
       
       console.log('Auth check response:', response);

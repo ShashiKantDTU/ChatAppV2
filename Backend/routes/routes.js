@@ -76,9 +76,10 @@ router.get('/auth/google/callback',
         // Set the cookie with necessary flags for cross-origin
         res.cookie('token', token, {
             httpOnly: true,
-            sameSite: 'none', // lowercase is important for some versions
+            sameSite: 'none',
             secure: true,
             path: '/',
+            domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : 'localhost',
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
         });
         
@@ -88,6 +89,7 @@ router.get('/auth/google/callback',
             sameSite: 'none',
             secure: true,
             path: '/',
+            domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : 'localhost',
             maxAge: '7 days'
         });
         
@@ -97,6 +99,7 @@ router.get('/auth/google/callback',
             sameSite: 'none',
             secure: true,
             path: '/',
+            domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : 'localhost',
             maxAge: 60000 // 1 minute
         });
         
@@ -129,9 +132,14 @@ router.get('/auth/google/callback',
         // Log final response headers after setting cookies
         console.log('Response headers after setting cookie:', res.getHeaders());
 
-        // ✅ Redirect to frontend with the stored return URL instead of default
-        console.log(`Redirecting to: ${returnUrl}`);
-        res.redirect(returnUrl);
+        // ✅ Redirect to frontend with the stored return URL instead of default 
+        // Include token in the URL as a fallback mechanism
+        const redirectUrlWithToken = returnUrl.includes('?') 
+            ? `${returnUrl}&token=${encodeURIComponent(token)}` 
+            : `${returnUrl}?token=${encodeURIComponent(token)}`;
+            
+        console.log(`Redirecting to: ${redirectUrlWithToken}`);
+        res.redirect(redirectUrlWithToken);
     }
 );
 
@@ -156,7 +164,8 @@ router.post("/logout", (req, res) => {
         httpOnly: true, 
         sameSite: 'none',
         secure: true,
-        path: '/'
+        path: '/',
+        domain: isProduction ? '.onrender.com' : 'localhost',
     });
     res.status(200).json({ message: "Logged out successfully" });
 });

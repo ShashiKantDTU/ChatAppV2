@@ -23,9 +23,21 @@ const verifyJWT = async (req, res, next) => {
     console.log('Request URL:', req.originalUrl);
     console.log('Cookie header:', req.headers.cookie);
     console.log('Origin header:', req.headers.origin);
+    console.log('Authorization header:', req.headers.authorization);
     
-    const token = req.cookies.token;
-    console.log('Token from cookies:', token ? 'Token exists' : 'Token missing');
+    // Get token from cookies or Authorization header
+    let token = req.cookies.token;
+    
+    // If no token in cookies, check Authorization header
+    if (!token && req.headers.authorization) {
+        const authHeader = req.headers.authorization;
+        if (authHeader.startsWith('Bearer ')) {
+            token = authHeader.substring(7);
+            console.log('Using token from Authorization header instead of cookies');
+        }
+    }
+    
+    console.log('Token from cookies/Authorization:', token ? 'Token exists' : 'Token missing');
     console.log('Cookies received:', req.cookies);
     
     if (!token) {
