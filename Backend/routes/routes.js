@@ -44,7 +44,7 @@ router.get('/auth/google/callback',
         const email = user.email;
         const name = user.name;
 
-        console.log('genrating JWT token for user ', user)
+        console.log('Generating JWT token for user:', user);
         // ✅ Generate JWT token
         const token = jwt.sign({ email:user.email, name: user.displayName }, process.env.JWT_SECRET);
 
@@ -52,8 +52,9 @@ router.get('/auth/google/callback',
         const isProduction = process.env.NODE_ENV === 'production';
         
         // Log the full request/response details for debugging
-        console.log('Request origin:', req.headers.origin);
-        console.log('Request host:', req.headers.host);
+        console.log('===== GOOGLE AUTH CALLBACK DEBUG =====');
+        console.log('Request headers:', req.headers);
+        console.log('Response headers before setting cookie:', res.getHeaders());
         
         // Set the cookie with necessary flags for cross-origin
         res.cookie('token', token, {
@@ -73,8 +74,18 @@ router.get('/auth/google/callback',
             maxAge: '7 days'
         });
         
+        // Better browser debugging - Add a visible cookie for the frontend to detect
+        res.cookie('auth_debug', 'true', {
+            httpOnly: false, // Visible to JavaScript
+            sameSite: 'none',
+            secure: true,
+            path: '/',
+            maxAge: 60000 // 1 minute
+        });
+        
         res.user = req.user;
-        console.log('res.user in routes/googleauthcallback ', res.user)
+        console.log('res.user in routes/googleauthcallback:', res.user);
+        
         // check if user already exists
         const existingUser = await User.findOne({email: email});
         if(!existingUser){
@@ -98,8 +109,11 @@ router.get('/auth/google/callback',
             await newUser.save();
         }
 
+        // Log final response headers after setting cookies
+        console.log('Response headers after setting cookie:', res.getHeaders());
 
         // ✅ Redirect to frontend
+        console.log(`Redirecting to: ${CLIENT_URL}`);
         res.redirect(CLIENT_URL);
     }
 );

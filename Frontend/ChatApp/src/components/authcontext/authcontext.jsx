@@ -23,33 +23,47 @@ const AuthProvider = ({ children }) => {
             try {
                 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
                 console.log(`Attempting to fetch user authentication (attempt ${retryCount + 1})`);
+                console.log('API URL:', API_URL);
                 
+                // Add explicit headers for better cross-domain cookie handling
                 const response = await fetch(`${API_URL}/me`, {
-                    credentials: "include", // Allows sending cookies
+                    method: 'GET',
+                    credentials: "include", // Essential for cross-domain cookies
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
                 });
 
+                console.log('Auth response status:', response.status);
                 const data = await response.json();
+                console.log('Auth response data:', data);
                 
                 if (data.user) {
                     console.log("User authenticated:", data.user);
                     setUser(data.user);
                     setLoading(false);
-                    navigate('/') // navigate to home page if userdata recieved
-                } else if (retryCount < 1) {
-                    // Retry once after a short delay if auth failed
-                    // This handles race conditions with cookie setting
-                    console.log("Auth check failed, retrying in 500ms...");
-                    setTimeout(() => fetchUser(retryCount + 1), 500);
+                } else if (retryCount < 2) { // Increase retry attempts
+                    // Retry with exponential backoff
+                    const delay = 500 * Math.pow(2, retryCount);
+                    console.log(`Auth check failed, retrying in ${delay}ms...`);
+                    setTimeout(() => fetchUser(retryCount + 1), delay);
                     return; // Don't finish loading yet
                 } else {
-                    console.log("User not authenticated after retry");
+                    console.log("User not authenticated after retries");
+                    setLoading(false);
+                    navigate('/login'); // Navigate to login if auth fails
                 }
             } catch (error) {
                 console.log("Error checking authentication:", error);
-            } finally {
-                // Only set loading to false if we're not going to retry
-                if (retryCount > 0) {
+                if (retryCount < 2) { // Also retry on errors
+                    const delay = 500 * Math.pow(2, retryCount);
+                    console.log(`Auth check error, retrying in ${delay}ms...`);
+                    setTimeout(() => fetchUser(retryCount + 1), delay);
+                    return;
+                } else {
                     setLoading(false);
+                    navigate('/login');
                 }
             }
         };
