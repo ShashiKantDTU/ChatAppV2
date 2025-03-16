@@ -308,132 +308,109 @@ const ChatWindow = (props) => {
             console.log(`Starting upload of ${selectedFiles.length} files to Cloudinary`);
             const formData = new FormData();
             selectedFiles.forEach((file, index) => {
-                console.log(`Appending file ${index + 1}: ${file.name}, type: ${file.type}, size: ${file.size}`);
+                console.log(`Appending file ${index + 1}: ${file.name}`);
                 formData.append('file', file);
             });
 
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-            console.log(`Sending request to ${API_URL}/upload`);
-            
-            try {
-                const response = await fetch(`${API_URL}/upload`, {
-                    method: 'POST',
-                    body: formData,
-                    credentials: 'include' // Include credentials if needed for authentication
-                });
+            const response = await fetch(`${API_URL}/upload`, {
+                method: 'POST',
+                body: formData,
+                credentials: 'include' // Include credentials if needed for authentication
+            });
+
+            if (!response.ok) {
+                throw new Error('Upload to Cloudinary failed');
+            }
+
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Upload failed');
+            }
+
+            console.log(`Server returned ${data.files.length} Cloudinary files`);
+            // Add detailed logging of the first file to understand its structure
+            if (data.files.length > 0) {
+                console.log('First file details:', JSON.stringify(data.files[0], null, 2));
+            }
+
+            // Process each uploaded Cloudinary file
+            for (let index = 0; index < data.files.length; index++) {
+                let retryCount = 0;
+                const maxRetries = 3;
+                const file = data.files[index];
                 
-                console.log('Upload response status:', response.status);
-                console.log('Upload response headers:', Object.fromEntries([...response.headers.entries()]));
+                console.log(`Processing Cloudinary file ${index + 1}:`, file);
                 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Server error response:', errorText);
-                    throw new Error(`Upload to Cloudinary failed with status ${response.status}: ${errorText}`);
-                }
-
-                const data = await response.json();
-                console.log('Upload response data:', data);
-                
-                if (!data.success) {
-                    throw new Error(data.error || 'Upload failed');
-                }
-
-                console.log(`Server returned ${data.files.length} Cloudinary files`);
-
-                // Process each uploaded Cloudinary file
-                for (let index = 0; index < data.files.length; index++) {
-                    let retryCount = 0;
-                    const maxRetries = 3;
-                    const file = data.files[index];
-                    
-                    console.log(`Processing Cloudinary file ${index + 1}:`, file);
-                    
-                    while (retryCount < maxRetries) {
-                        try {
-                            // Determine media type from mime type
-                            const mimeType = file.mimeType;
-                            let mediaType = 'file'; // Default type
-                            
-                            if (mimeType.startsWith('image/')) {
-                                mediaType = 'image';
-                            } else if (mimeType.startsWith('video/')) {
-                                mediaType = 'video';
-                            } else if (mimeType.startsWith('audio/')) {
-                                mediaType = 'audio';
-                            }
-                            
-                            console.log(`File ${index + 1} detected as ${mediaType} type`);
-
-                            // Validate the URL is accessible
-                            try {
-                                const urlCheck = await fetch(file.url, { method: 'HEAD' });
-                                console.log(`URL check for ${file.url}: ${urlCheck.status}`);
-                                if (!urlCheck.ok) {
-                                    console.warn(`Warning: URL check failed with status ${urlCheck.status}`);
-                                }
-                            } catch (urlError) {
-                                console.warn(`Warning: URL check error:`, urlError);
-                            }
-
-                            // Create media message with Cloudinary URL and public_id
-                            const mediaMessage = {
-                                chatid: props.userdata.chatid,
-                                senderid: props.localUser.uid,
-                                recieverid: props.userdata.uid,
-                                messageType: mediaType,
-                                media: {
-                                    type: mediaType,
-                                    url: file.url,
-                                    filename: file.filename,
-                                    size: file.size,
-                                    mimeType: file.mimeType,
-                                    cloudinary_id: file.public_id || file.filename // Ensure we get the public_id correctly
-                                },
-                                sent: { issent: true, sentat: new Date() },
-                                delivered: { isdelivered: false, deliveredat: null },
-                                read: { isread: false, readat: null },
-                                deletedfor: [],
-                                deletedby: null,
-                                createdat: new Date(),
-                                // Add a unique temporary ID to identify this message locally
-                                _id: `temp_${Date.now()}_${index}`,
-                                reactions: [],
-                                // Add a flag to indicate this is a server message that should be handled by the socket
-                                isBeingSentToServer: true
-                            };
-
-                            // IMPORTANT: DON'T add message to UI first - let the socket handler do it
-                            // Just send it to the server directly
-                            console.log(`Sending Cloudinary media message for file ${index + 1}`);
-                            props.handlesend(mediaMessage);
-                            
-                            // Update progress
-                            const progress = ((index + 1) / data.files.length) * 100;
-                            setUploadProgress(progress);
-                            console.log(`Upload progress: ${progress}%`);
-                            
-                            // If successful, break the retry loop
-                            break;
-                        } catch (error) {
-                            retryCount++;
-                            console.error(`Error processing Cloudinary file ${index + 1}, attempt ${retryCount}:`, error);
-                            
-                            if (retryCount === maxRetries) {
-                                throw new Error(`Failed to process Cloudinary file ${file.filename} after ${maxRetries} attempts: ${error.message}`);
-                            }
-                            
-                            // Wait before retrying
-                            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                while (retryCount < maxRetries) {
+                    try {
+                        // Determine media type from mime type
+                        const mimeType = file.mimeType;
+                        let mediaType = 'file'; // Default type
+                        
+                        if (mimeType.startsWith('image/')) {
+                            mediaType = 'image';
+                        } else if (mimeType.startsWith('video/')) {
+                            mediaType = 'video';
+                        } else if (mimeType.startsWith('audio/')) {
+                            mediaType = 'audio';
                         }
+
+                        // Create media message with Cloudinary URL and public_id
+                        const mediaMessage = {
+                            chatid: props.userdata.chatid,
+                            senderid: props.localUser.uid,
+                            recieverid: props.userdata.uid,
+                            messageType: mediaType,
+                            media: {
+                                type: mediaType,
+                                url: file.url,
+                                filename: file.filename,
+                                size: file.size,
+                                mimeType: file.mimeType,
+                                cloudinary_id: file.public_id // Store Cloudinary public_id for potential deletion later
+                            },
+                            sent: { issent: true, sentat: new Date() },
+                            delivered: { isdelivered: false, deliveredat: null },
+                            read: { isread: false, readat: null },
+                            deletedfor: [],
+                            deletedby: null,
+                            createdat: new Date(),
+                            // Add a unique temporary ID to identify this message locally
+                            _id: `temp_${Date.now()}_${index}`,
+                            reactions: [],
+                            // Add a flag to indicate this is a server message that should be handled by the socket
+                            isBeingSentToServer: true
+                        };
+
+                        // IMPORTANT: DON'T add message to UI first - let the socket handler do it
+                        // Just send it to the server directly
+                        console.log(`Sending Cloudinary media message for file ${index + 1}`);
+                        props.handlesend(mediaMessage);
+                        
+                        // Update progress
+                        const progress = ((index + 1) / data.files.length) * 100;
+                        setUploadProgress(progress);
+                        console.log(`Upload progress: ${progress}%`);
+                        
+                        // If successful, break the retry loop
+                        break;
+                    } catch (error) {
+                        retryCount++;
+                        console.error(`Error processing Cloudinary file ${index + 1}, attempt ${retryCount}:`, error);
+                        
+                        if (retryCount === maxRetries) {
+                            throw new Error(`Failed to process Cloudinary file ${file.filename} after ${maxRetries} attempts`);
+                        }
+                        
+                        // Wait before retrying
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
                     }
                 }
-
-                console.log('All Cloudinary files processed and sent');
-                setSelectedFiles([]);
-            } catch (fetchError) {
-                console.error('Fetch error during upload:', fetchError);
-                throw new Error(`Network error during upload: ${fetchError.message}`);
             }
+
+            console.log('All Cloudinary files processed and sent');
+            setSelectedFiles([]);
         } catch (error) {
             console.error('Error in Cloudinary upload process:', error);
             alert('Failed to complete Cloudinary upload process: ' + error.message);
@@ -761,6 +738,7 @@ const ChatWindow = (props) => {
             }
 
             console.log('Successfully uploaded audio file to Cloudinary:', uploadedFile);
+            console.log('Audio file details:', JSON.stringify(uploadedFile, null, 2));
 
             // Create audio message with Cloudinary URL
             const audioMessage = {
@@ -774,7 +752,7 @@ const ChatWindow = (props) => {
                     filename: uploadedFile.filename,
                     size: uploadedFile.size,
                     mimeType: uploadedFile.mimeType,
-                    cloudinary_id: uploadedFile.public_id || uploadedFile.filename // Ensure we get the public_id correctly
+                    cloudinary_id: uploadedFile.public_id // Store the Cloudinary public_id
                 },
                 sent: { issent: true, sentat: new Date() },
                 delivered: { isdelivered: false, deliveredat: null },

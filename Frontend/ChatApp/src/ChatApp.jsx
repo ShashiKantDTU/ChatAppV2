@@ -731,12 +731,13 @@ function ChatApp() {
         if (messageToUpdate.media && messageToUpdate.media.cloudinary_id) {
           console.log('▶️ Deleting media from Cloudinary:', messageToUpdate.media.cloudinary_id);
           
-          // Make sure we have a valid ID
-          let cloudinaryId = messageToUpdate.media.cloudinary_id;
-          
           // Delete the file from Cloudinary
           const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-          fetch(`${API_URL}/delete-file/${encodeURIComponent(cloudinaryId)}`, {
+          
+          // Log the parameters we're sending to the server
+          console.log('▶️ API URL:', `${API_URL}/delete-file/${messageToUpdate.media.cloudinary_id}`);
+          
+          fetch(`${API_URL}/delete-file/${messageToUpdate.media.cloudinary_id}`, {
             method: 'DELETE',
             credentials: 'include',
             headers: {
@@ -744,12 +745,11 @@ function ChatApp() {
             }
           })
           .then(response => {
-            if (!response.ok) {
-              throw new Error(`Server responded with ${response.status}`);
-            }
+            console.log('▶️ Cloudinary delete response status:', response.status);
             return response.json();
           })
           .then(data => {
+            console.log('▶️ Cloudinary delete response data:', data);
             if (data.success) {
               console.log('✅ Successfully deleted file from Cloudinary');
             } else {

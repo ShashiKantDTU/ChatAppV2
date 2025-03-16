@@ -59,7 +59,7 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
     optionsSuccessStatus: 200,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Request-Method', 'Access-Control-Request-Headers']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // Additional CORS headers for preflight requests
@@ -67,7 +67,7 @@ app.use((req, res, next) => {
     // Important: This must match the origin for cookie purposes
     res.header('Access-Control-Allow-Origin', process.env.CLIENT_URL || 'http://localhost:5173');
     res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Access-Control-Allow-Origin');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     
     // Handle preflight requests
@@ -87,21 +87,6 @@ const storage = new CloudinaryStorage({
     params: {
         folder: 'chat_uploads',
         resource_type: 'auto',
-        format: (req, file) => {
-            // We want to preserve original extension when possible
-            // Extract extension from mimetype
-            const extension = file.mimetype.split('/')[1];
-            return extension || 'raw'; // Default to raw if no extension
-        },
-        public_id: (req, file) => {
-            // Create a unique ID for each file
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            // Remove extension from original name to avoid double extensions
-            const nameWithoutExt = file.originalname.replace(/\.[^/.]+$/, "");
-            // Return sanitized filename with unique suffix
-            return `${nameWithoutExt.replace(/[^a-zA-Z0-9]/g, '_')}_${uniqueSuffix}`;
-        },
-        // Allowed formats remains the same
         allowed_formats: [
             // Images
             'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff',
@@ -122,11 +107,7 @@ const storage = new CloudinaryStorage({
             // Code files
             'json', 'xml', 'yaml', 'py'
         ],
-        // Image transformations
-        transformation: [
-            { quality: 'auto' },
-            { fetch_format: 'auto' }
-        ]
+        transformation: { quality: 'auto' }
     }
 });
 
@@ -169,103 +150,52 @@ const upload = multer({
 });
 
 // File upload endpoint
-app.post('/upload', (req, res, next) => {
-    console.log('📁 Upload request received');
-    console.log('📁 Headers:', req.headers);
-    console.log('📁 Files count in request:', req.files?.length || 'No files yet');
-    
-    // Continue with multer processing
-    upload.array('file', 10)(req, res, (err) => {
-        if (err) {
-            console.error('❌ Multer error:', err);
-            return res.status(400).json({
-                success: false,
-                error: err.message
-            });
+app.post('/upload', upload.array('file', 10), (req, res) => {
+    try {
+        if (!req.files || req.files.length === 0) {
+            throw new Error('No files uploaded');
         }
-        
-        console.log('📁 Multer processing complete');
-        console.log('📁 Files received:', req.files?.length || 0);
-        
-        try {
-            if (!req.files || req.files.length === 0) {
-                throw new Error('No files uploaded');
-            }
 
-            console.log('📁 Processing files from Cloudinary...');
+        // Handle multiple files with Cloudinary URLs
+        const files = req.files.map(file => {
+            // Debug log to see the structure of the file object
+            console.log('File object structure:', JSON.stringify(file, null, 2));
             
-            // Handle multiple files with Cloudinary URLs
-            const files = req.files.map((file, index) => {
-                console.log(`📁 Processing file ${index + 1}:`, {
-                    originalname: file.originalname,
-                    path: file.path,
-                    size: file.size,
-                    mimetype: file.mimetype
-                });
-                
-                // Extract the public_id correctly from the Cloudinary response
-                // The path contains the full URL, but we need just the public_id for deletion
-                let public_id = file.filename;
-                
-                // If Cloudinary returns a public_id directly, use that
-                if (file.public_id) {
-                    public_id = file.public_id;
-                    console.log(`📁 Using direct public_id: ${public_id}`);
-                } 
-                // Otherwise try to extract it from the path
-                else if (file.path) {
-                    try {
-                        // Parse the URL to extract public_id 
-                        // Cloudinary URLs have a format like: 
-                        // https://res.cloudinary.com/cloud_name/resource_type/upload/v12345/folder/public_id.ext
-                        const urlParts = file.path.split('/');
-                        // The public_id is usually the last part without extension
-                        const lastPart = urlParts[urlParts.length - 1];
-                        const fileId = lastPart.split('.')[0]; // Remove extension
-                        
-                        // If we have a folder structure, include it
-                        const folderMatch = file.path.match(/\/([^\/]+)\/([^\/]+)$/);
-                        if (folderMatch && folderMatch[1] !== 'upload') {
-                            public_id = `${folderMatch[1]}/${fileId}`;
-                            console.log(`📁 Extracted public_id with folder: ${public_id}`);
-                        } else {
-                            public_id = fileId;
-                            console.log(`📁 Extracted public_id without folder: ${public_id}`);
-                        }
-                    } catch (error) {
-                        console.error('❌ Error extracting public_id from path:', error);
-                    }
-                }
-                
-                return {
-                    url: file.path, // Cloudinary returns the full URL in the path property
-                    filename: file.originalname,
-                    size: file.size,
-                    mimeType: file.mimetype,
-                    public_id: public_id // Store the extracted public_id
-                };
-            });
+            // Extract the public_id from the Cloudinary response
+            // The public_id is typically in the filename property or could be parsed from the path
+            const cloudinaryPath = file.path;
+            const pathParts = cloudinaryPath.split('/');
+            const filenameWithExtension = pathParts[pathParts.length - 1]; 
+            const publicId = filenameWithExtension.split('.')[0]; // Remove extension
+            
+            return {
+                url: file.path, // Cloudinary returns the full URL in the path property
+                filename: file.originalname,
+                size: file.size,
+                mimeType: file.mimetype,
+                public_id: publicId // Correctly extract the public_id from Cloudinary response
+            };
+        });
 
-            console.log('📁 All files processed, sending response');
-            
-            res.json({
-                success: true,
-                files: files
-            });
-        } catch (error) {
-            console.error('❌ Upload error:', error);
-            res.status(400).json({
-                success: false,
-                error: error.message
-            });
-        }
-    });
+        console.log('Processed files:', files);
+
+        res.json({
+            success: true,
+            files: files
+        });
+    } catch (error) {
+        console.error('Upload error:', error);
+        res.status(400).json({
+            success: false,
+            error: error.message
+        });
+    }
 });
 
 // Add endpoint to delete a file from Cloudinary
 app.delete('/delete-file/:publicId', async (req, res) => {
     try {
-        let publicId = req.params.publicId;
+        const publicId = req.params.publicId;
         if (!publicId) {
             return res.status(400).json({
                 success: false,
@@ -273,24 +203,17 @@ app.delete('/delete-file/:publicId', async (req, res) => {
             });
         }
 
-        console.log('Deleting file from Cloudinary with ID:', publicId);
-
-        // Check if the public_id includes file extension and remove it
-        if (publicId.includes('.')) {
-            publicId = publicId.split('.')[0];
-        }
+        console.log('Attempting to delete file with publicId:', publicId);
         
-        // Handle potential folder path in public_id
-        // If the id doesn't already include the folder, add it
-        if (!publicId.includes('chat_uploads/') && publicId.indexOf('/') === -1) {
-            publicId = `chat_uploads/${publicId}`;
-        }
-        
-        console.log('Formatted public_id for deletion:', publicId);
+        // The public_id may need to include the folder path for Cloudinary to recognize it
+        const fullPublicId = publicId.includes('chat_uploads/') ? 
+            publicId : 
+            `chat_uploads/${publicId}`;
+            
+        console.log('Using fullPublicId for deletion:', fullPublicId);
 
         // Delete file from Cloudinary
-        const result = await cloudinary.uploader.destroy(publicId);
-        
+        const result = await cloudinary.uploader.destroy(fullPublicId);
         console.log('Cloudinary delete result:', result);
         
         if (result.result === 'ok') {
@@ -299,7 +222,7 @@ app.delete('/delete-file/:publicId', async (req, res) => {
                 message: 'File deleted successfully'
             });
         } else {
-            throw new Error(`Failed to delete file from Cloudinary: ${result.result}`);
+            throw new Error('Failed to delete file from Cloudinary: ' + result.result);
         }
     } catch (error) {
         console.error('Cloudinary delete error:', error);
