@@ -32,23 +32,22 @@ passport.use(new GoogleStrategy({
 }));
 
 // ✅ Google Login Route
-router.get('/auth/google',
-    (req, res, next) => {
-        // Store return URL in session if provided
-        const returnUrl = req.query.return_url;
-        if (returnUrl) {
-            req.session = req.session || {};
-            req.session.returnUrl = returnUrl;
-            console.log('Storing return URL for OAuth:', returnUrl);
-        }
-        next();
-    },
+router.get('/auth/google', (req, res, next) => {
+    // Store return URL in session if provided
+    const returnUrl = req.query.return_url;
+    if (returnUrl) {
+        req.session = req.session || {};
+        req.session.returnUrl = returnUrl;
+        console.log('Storing return URL for OAuth:', returnUrl);
+    }
+    
+    // Call passport authenticate with dynamic state parameter
     passport.authenticate('google', { 
         scope: ['profile', 'email'],
-        // Pass any return URL as state to be restored after auth
-        state: req.query.return_url || ''
-    })
-);
+        // Pass the return URL as state for callback
+        state: returnUrl || ''
+    })(req, res, next);
+});
 
 // ✅ Google OAuth Callback
 router.get('/auth/google/callback', 
