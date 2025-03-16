@@ -56,8 +56,8 @@ router.get('/auth/google/callback',
             secure: isProduction,
             path: '/'
         });
-        res.user = token;
-        console.log('res.user in routes/googleauthcallback stored from token ', res.user)
+        res.user = req.user;
+        console.log('res.user in routes/googleauthcallback ', res.user)
         // check if user already exists
         const existingUser = await User.findOne({email: email});
         if(!existingUser){
