@@ -50,21 +50,27 @@ router.get('/auth/google/callback',
 
         // ✅ Store JWT token in HTTP-only cookie with consistent settings
         const isProduction = process.env.NODE_ENV === 'production';
+        
+        // Log the full request/response details for debugging
+        console.log('Request origin:', req.headers.origin);
+        console.log('Request host:', req.headers.host);
+        
+        // Set the cookie with necessary flags for cross-origin
         res.cookie('token', token, {
             httpOnly: true,
-            sameSite: 'None', // Always use None for cross-site requests
-            secure: true, // Always use secure in production
+            sameSite: 'none', // lowercase is important for some versions
+            secure: true,
             path: '/',
-            // Remove domain setting completely - let browser handle it
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
         });
         
         // Log what we're doing for debugging
         console.log('Setting auth cookie with token. Cookie options:', {
             httpOnly: true,
-            sameSite: 'None',
+            sameSite: 'none',
             secure: true,
             path: '/',
-            isProduction
+            maxAge: '7 days'
         });
         
         res.user = req.user;
@@ -117,10 +123,9 @@ router.post("/logout", (req, res) => {
     const isProduction = process.env.NODE_ENV === 'production';
     res.clearCookie("token", { 
         httpOnly: true, 
-        sameSite: 'None',
+        sameSite: 'none',
         secure: true,
-        path: '/',
-        // Remove domain setting
+        path: '/'
     });
     res.status(200).json({ message: "Logged out successfully" });
 });

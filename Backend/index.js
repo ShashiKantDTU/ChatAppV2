@@ -12,6 +12,7 @@ const { send } = require('process');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const cookie = require('cookie-parser');
 
 const app = express();
 const server = http.createServer(app);
@@ -23,16 +24,34 @@ const io = new Server(server, {
     }
 });
 
+// Add cookie parser middleware BEFORE routes
+app.use(cookie());
+
+// Log all incoming request headers for debugging
+app.use((req, res, next) => {
+    console.log('=== REQUEST DEBUG ===');
+    console.log('Request URL:', req.originalUrl);
+    console.log('Request headers:', {
+        cookie: req.headers.cookie,
+        origin: req.headers.origin,
+        host: req.headers.host,
+        referer: req.headers.referer
+    });
+    next();
+});
+
 // Enable CORS for specific choices
 app.use(cors({
     origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
-    optionsSuccessStatus: 200
+    optionsSuccessStatus: 200,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // Additional CORS headers for preflight requests
 app.use((req, res, next) => {
+    // Important: This must match the origin for cookie purposes
     res.header('Access-Control-Allow-Origin', process.env.CLIENT_URL || 'http://localhost:5173');
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
