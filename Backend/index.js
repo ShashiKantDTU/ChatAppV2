@@ -75,6 +75,17 @@ app.use((req, res, next) => {
 // Middleware for routes
 app.use(router);
 
+// Add a specific route for file uploads that bypasses the JSON parser
+app.post('/upload', (req, res, next) => {
+    console.log('Upload route hit, bypassing JSON parser');
+    next();
+});
+
+app.post('/upload-audio', (req, res, next) => {
+    console.log('Audio upload route hit, bypassing JSON parser');
+    next();
+});
+
 // Configure Cloudinary
 const cloudinaryConfig = {
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -93,16 +104,30 @@ if (!cloudinaryConfig.cloud_name || !cloudinaryConfig.api_key || !cloudinaryConf
 // Configure Cloudinary with the validated config
 cloudinary.config(cloudinaryConfig);
 
+// Log Cloudinary configuration status
+console.log('Cloudinary configuration status:');
+console.log(`- Cloud name: ${cloudinaryConfig.cloud_name ? 'Configured ✅' : 'Missing ❌'}`);
+console.log(`- API key: ${cloudinaryConfig.api_key ? 'Configured ✅' : 'Missing ❌'}`);
+console.log(`- API secret: ${cloudinaryConfig.api_secret ? 'Configured ✅' : 'Missing ❌'}`);
+
 // Configure Cloudinary storage for multer with error handling
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
         folder: 'chat-app-uploads',
         resource_type: 'auto',
-        // Remove allowed_formats to let Cloudinary handle all formats
-        // This is more reliable than specifying them manually
+        // Use a callback to determine resource type based on file
+        format: (req, file) => {
+            console.log('Determining format for file:', file.originalname);
+            // Extract extension from original filename
+            const extension = file.originalname.split('.').pop().toLowerCase();
+            console.log('File extension:', extension);
+            return extension;
+        }
     }
 });
+
+console.log('CloudinaryStorage configured');
 
 const upload = multer({
     storage: storage,
@@ -161,7 +186,7 @@ app.post('/upload', upload.array('file', 10), (req, res) => {
                 filename: file.originalname,
                 size: file.size,
                 mimetype: file.mimetype,
-                cloudinaryId: file.filename
+                cloudinaryId: file.public_id || file.filename
             });
             
             return {
@@ -169,7 +194,7 @@ app.post('/upload', upload.array('file', 10), (req, res) => {
                 filename: file.originalname,
                 size: file.size,
                 mimeType: file.mimetype,
-                public_id: file.filename // Store Cloudinary's public_id for potential deletion later
+                public_id: file.public_id || file.filename // Store Cloudinary's public_id for potential deletion later
             };
         });
 
@@ -251,6 +276,60 @@ app.get('/cloudinary-status', (req, res) => {
     }
 });
 
+// Simple test route for file upload form
+app.get('/upload-test', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Cloudinary Upload Test</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+                h1 { color: #333; }
+                form { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+                input[type="file"] { margin: 10px 0; }
+                button { background: #4CAF50; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
+                button:hover { background: #45a049; }
+                pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow: auto; }
+            </style>
+        </head>
+        <body>
+            <h1>Cloudinary Upload Test</h1>
+            <p>Use this form to test file uploads to Cloudinary</p>
+            
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <h2>Test File Upload</h2>
+                <input type="file" name="file" multiple />
+                <button type="submit">Upload Files</button>
+            </form>
+            
+            <form action="/upload-audio" method="post" enctype="multipart/form-data">
+                <h2>Test Audio Upload</h2>
+                <input type="file" name="audio" accept="audio/*" />
+                <button type="submit">Upload Audio</button>
+            </form>
+            
+            <div>
+                <h2>Cloudinary Configuration Status</h2>
+                <pre id="status">Loading...</pre>
+            </div>
+            
+            <script>
+                // Fetch Cloudinary status
+                fetch('/cloudinary-status')
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('status').textContent = JSON.stringify(data, null, 2);
+                    })
+                    .catch(error => {
+                        document.getElementById('status').textContent = 'Error fetching status: ' + error.message;
+                    });
+            </script>
+        </body>
+        </html>
+    `);
+});
+
 // File deletion endpoint for Cloudinary
 app.delete('/delete-file', async (req, res) => {
     try {
@@ -298,7 +377,7 @@ app.post('/upload-audio', upload.single('audio'), (req, res) => {
             filename: req.file.originalname || 'voice-message.webm',
             size: req.file.size,
             mimetype: req.file.mimetype,
-            cloudinaryId: req.file.filename
+            cloudinaryId: req.file.public_id || req.file.filename
         });
 
         // Return the Cloudinary URL and file details
@@ -309,7 +388,7 @@ app.post('/upload-audio', upload.single('audio'), (req, res) => {
                 filename: req.file.originalname || 'voice-message.webm',
                 size: req.file.size,
                 mimeType: req.file.mimetype,
-                public_id: req.file.filename
+                public_id: req.file.public_id || req.file.filename
             }
         });
     } catch (error) {
