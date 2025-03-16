@@ -15,6 +15,8 @@ const fs = require('fs');
 const cookie = require('cookie-parser');
 const session = require('express-session');
 const configureSession = require('./config/session');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const app = express();
 const server = http.createServer(app);
@@ -73,20 +75,27 @@ app.use((req, res, next) => {
 // Middleware for routes
 app.use(router);
 
-// Create uploads directory if it doesn't exist
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
-// Configure multer for file upload
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
+// Configure Cloudinary storage for multer
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'chat-app-uploads',
+        resource_type: 'auto',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff', 
+                         'mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv',
+                         'mp3', 'wav', 'ogg', 'midi', 'aac', 'flac',
+                         'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+                         'zip', 'rar', '7z', 'tar',
+                         'txt', 'csv', 'html', 'css', 'js',
+                         'json', 'xml', 'yaml', 'py',
+                         'ttf', 'otf', 'woff', 'woff2'],
     }
 });
 
@@ -128,9 +137,6 @@ const upload = multer({
     }
 });
 
-// Serve uploaded files statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // File upload endpoint
 app.post('/upload', upload.array('file', 10), (req, res) => {
     try {
@@ -140,10 +146,11 @@ app.post('/upload', upload.array('file', 10), (req, res) => {
 
         // Handle multiple files
         const files = req.files.map(file => ({
-            url: `http://localhost:3000/uploads/${file.filename}`,
+            url: file.path, // Cloudinary returns the URL in the path property
             filename: file.originalname,
             size: file.size,
-            mimeType: file.mimetype
+            mimeType: file.mimetype,
+            public_id: file.filename // Store Cloudinary's public_id for potential deletion later
         }));
 
         res.json({
@@ -152,6 +159,65 @@ app.post('/upload', upload.array('file', 10), (req, res) => {
         });
     } catch (error) {
         console.error('Upload error:', error);
+        res.status(400).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// File deletion endpoint for Cloudinary
+app.delete('/delete-file', async (req, res) => {
+    try {
+        const { public_id } = req.body;
+        
+        if (!public_id) {
+            return res.status(400).json({
+                success: false,
+                error: 'No public_id provided'
+            });
+        }
+
+        // Delete the file from Cloudinary
+        const result = await cloudinary.uploader.destroy(public_id);
+        
+        if (result.result === 'ok') {
+            res.json({
+                success: true,
+                message: 'File deleted successfully'
+            });
+        } else {
+            throw new Error('Failed to delete file from Cloudinary');
+        }
+    } catch (error) {
+        console.error('File deletion error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Audio recording upload endpoint
+app.post('/upload-audio', upload.single('audio'), (req, res) => {
+    try {
+        if (!req.file) {
+            throw new Error('No audio file uploaded');
+        }
+
+        // Return the Cloudinary URL and file details
+        res.json({
+            success: true,
+            file: {
+                url: req.file.path,
+                filename: req.file.originalname || 'voice-message.webm',
+                size: req.file.size,
+                mimeType: req.file.mimetype,
+                public_id: req.file.filename
+            }
+        });
+    } catch (error) {
+        console.error('Audio upload error:', error);
         res.status(400).json({
             success: false,
             error: error.message
@@ -453,6 +519,18 @@ io.on('connection', (socket) => {
             }
 
             console.log("✅ Updated Message in DB:", updatedMessage);
+
+            // If this is a delete-for-everyone operation and the message has media, delete the file from Cloudinary
+            if (isDeleteForEveryone && updatedMessage.media && updatedMessage.media.public_id) {
+                try {
+                    console.log("🗑️ Deleting media file from Cloudinary:", updatedMessage.media.public_id);
+                    await cloudinary.uploader.destroy(updatedMessage.media.public_id);
+                    console.log("✅ Media file deleted from Cloudinary");
+                } catch (cloudinaryError) {
+                    console.error("❌ Error deleting file from Cloudinary:", cloudinaryError);
+                    // Continue with the message update even if file deletion fails
+                }
+            }
 
             // Identify sender and receiver
             const messagesender = await User.findOne({ uid: updatedMessage.senderid });

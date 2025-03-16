@@ -361,7 +361,8 @@ const ChatWindow = (props) => {
                                 url: file.url,
                                 filename: file.filename,
                                 size: file.size,
-                                mimeType: file.mimeType
+                                mimeType: file.mimeType,
+                                public_id: file.public_id // Store Cloudinary public_id
                             },
                             sent: { issent: true, sentat: new Date() },
                             delivered: { isdelivered: false, deliveredat: null },
@@ -704,10 +705,10 @@ const ChatWindow = (props) => {
 
         try {
             const formData = new FormData();
-            formData.append('file', audioBlob, 'audio.webm');
+            formData.append('audio', audioBlob, 'audio.webm');
 
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-            const response = await fetch(`${API_URL}/upload`, {
+            const response = await fetch(`${API_URL}/upload-audio`, {
                 method: 'POST',
                 body: formData
             });
@@ -721,9 +722,8 @@ const ChatWindow = (props) => {
                 throw new Error(data.error || 'Upload failed');
             }
 
-            // Server returns 'files' array, not a single 'file' object
-            // Extract the first file from the array
-            const uploadedFile = data.files && data.files.length > 0 ? data.files[0] : null;
+            // Server returns a single 'file' object for audio uploads
+            const uploadedFile = data.file;
             
             if (!uploadedFile) {
                 throw new Error('No file data returned from server');
@@ -742,7 +742,8 @@ const ChatWindow = (props) => {
                     url: uploadedFile.url,
                     filename: uploadedFile.filename,
                     size: uploadedFile.size,
-                    mimeType: uploadedFile.mimeType
+                    mimeType: uploadedFile.mimeType,
+                    public_id: uploadedFile.public_id // Store Cloudinary public_id
                 },
                 sent: { issent: true, sentat: new Date() },
                 delivered: { isdelivered: false, deliveredat: null },
