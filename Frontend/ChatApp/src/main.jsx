@@ -12,27 +12,15 @@ window.fetch = function(...args) {
       (resource.includes('localhost:3000') || 
        resource.includes('chatappv2-qa96.onrender.com'))) {
     
-    // Check if this is a FormData upload using multiple detection methods
-    const bodyToString = config?.body?.toString ? config.body.toString() : '';
-    const constructorName = config?.body?.constructor?.name;
+    // Safer FormData check that doesn't rely on instanceof
+    const isFormDataUpload = (
+      config?.body && 
+      typeof FormData !== 'undefined' && 
+      Object.prototype.toString.call(config?.body) === '[object FormData]'
+    );
     
-    // Use multiple methods to detect FormData
-    const isFormDataUpload = 
-      // Method 1: toString check
-      (bodyToString === '[object FormData]') ||
-      // Method 2: constructor name check
-      (constructorName === 'FormData') ||
-      // Method 3: Content-Type header check (if manually set)
-      (config?.headers && 
-       typeof config.headers['Content-Type'] === 'string' && 
-       config.headers['Content-Type'].includes('multipart/form-data'));
-    
-    console.log('FormData detection:', { 
-      isFormData: isFormDataUpload,
-      bodyType: config?.body ? (typeof config.body) : 'none',
-      bodyToString,
-      constructorName
-    });
+    // Log the body type for debugging
+    console.log('Request body type:', config?.body ? Object.prototype.toString.call(config?.body) : 'no body');
     
     // Clone headers to avoid modifying the original object
     const headers = { ...(config?.headers || {}) };
@@ -40,16 +28,8 @@ window.fetch = function(...args) {
     // Only add Content-Type for non-FormData requests
     if (!isFormDataUpload) {
       headers['Content-Type'] = 'application/json';
-      console.log('Setting Content-Type: application/json');
     } else {
-      console.log('FormData detected - not setting Content-Type header');
-      
-      // If this is a FormData request, ensure we don't have a Content-Type header
-      // as the browser needs to set this with the boundary
-      if (headers['Content-Type']) {
-        console.log('Removing existing Content-Type for FormData request');
-        delete headers['Content-Type'];
-      }
+      console.log('FormData detected, not setting Content-Type');
     }
     
     headers['Accept'] = 'application/json';

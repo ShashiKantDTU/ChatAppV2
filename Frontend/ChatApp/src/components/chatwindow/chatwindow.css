@@ -617,6 +617,270 @@ h3, p {
     font-size: 0.9rem;
 }
 
+/* Voice Recording Styles */
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    flex: 1;
+}
+
+.recording-dot {
+    width: 8px;
+    height: 8px;
+    background-color: #ef4444;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+.recording-time {
+    font-family: monospace;
+    font-weight: 500;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.input-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.input-buttons button {
+    padding: 8px;
+    border-radius: 8px;
+    border: none;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.input-buttons button:hover:not(:disabled) {
+    background-color: var(--hover-bg);
+    color: var(--accent-primary);
+}
+
+.input-buttons button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.input-buttons button.recording {
+    background-color: #ef4444;
+    color: white;
+    animation: pulse 1.5s infinite;
+}
+
+.input-buttons button.recording:hover:not(:disabled) {
+    background-color: #dc2626;
+    color: white;
+}
+
+/* Audio Recording Button Styles */
+.audio-record-btn {
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.audio-record-btn.recording {
+    background-color: #ef4444;
+    color: white;
+}
+
+.recording-animation {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pulse-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background-color: #ef4444;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* Recording Wave Animation */
+.recording-wave {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 8px;
+}
+
+.wave-bar {
+    width: 3px;
+    height: 20px;
+    background-color: #ef4444;
+    border-radius: 2px;
+    animation: wave 1s ease-in-out infinite;
+}
+
+.wave-bar:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.wave-bar:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes wave {
+    0%, 100% {
+        height: 20px;
+    }
+    50% {
+        height: 30px;
+    }
+}
+
+/* Audio Preview Styles */
+.audio-confirmation {
+    max-width: 500px;
+}
+
+.audio-preview-container {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.audio-player {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.play-button {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background-color: var(--accent-primary);
+    color: white;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.play-button:hover {
+    transform: scale(1.05);
+    background-color: var(--accent-secondary);
+}
+
+.audio-waveform {
+    flex: 1;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+}
+
+.waveform-bars {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 100%;
+}
+
+.waveform-bar {
+    flex: 1;
+    height: 100%;
+    background-color: var(--accent-primary);
+    border-radius: 2px;
+    opacity: 0.3;
+    animation: waveform 1s ease-in-out infinite;
+}
+
+.waveform-bar:nth-child(odd) {
+    animation-delay: 0.2s;
+}
+
+.waveform-bar:nth-child(3n) {
+    animation-delay: 0.4s;
+}
+
+@keyframes waveform {
+    0%, 100% {
+        height: 30%;
+    }
+    50% {
+        height: 100%;
+    }
+}
+
+.audio-duration {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    min-width: 60px;
+    text-align: right;
+}
+
+/* Audio Message Styles */
+.audio-message {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    max-width: 300px;
+}
+
+.audio-message .play-button {
+    width: 36px;
+    height: 36px;
+}
+
+.audio-message .audio-waveform {
+    height: 36px;
+}
+
+.audio-message .audio-duration {
+    font-size: 0.75rem;
+}
+
 /* Scroll to bottom button styles */
 .scroll-to-bottom-btn {
     position: absolute;
@@ -646,33 +910,43 @@ h3, p {
     animation: pulse-attention 2s infinite;
 }
 
-.new-messages-indicator {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.new-message-dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #e11d48;
+    display: block;
+    animation: pulse-dot 1.5s infinite;
 }
 
-.new-messages-indicator span {
-    font-size: 0.75rem;
+/* Unread message counter */
+.unread-count {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    background-color: #e11d48;
+    color: white;
+    font-size: 12px;
     font-weight: bold;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    border: 2px solid var(--bg-primary, white);
+    animation: bounce-in 0.5s;
 }
 
-@keyframes pulse-attention {
-    0% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.7);
-    }
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 0 0 10px rgba(225, 29, 72, 0);
-    }
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(225, 29, 72, 0);
-    }
+.scroll-to-bottom-btn:hover {
+    opacity: 1;
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes fadeIn {
@@ -683,6 +957,45 @@ h3, p {
     to {
         opacity: 0.8;
         transform: translateY(0);
+    }
+}
+
+@keyframes pulse-attention {
+    0% {
+        box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(225, 29, 72, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(225, 29, 72, 0);
+    }
+}
+
+@keyframes pulse-dot {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.5);
+        opacity: 0.7;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes bounce-in {
+    0% {
+        transform: scale(0.5);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
     }
 }
 
