@@ -988,7 +988,8 @@ const ChatWindow = (props) => {
             setCallInfo({
                 callerId: callData.callerId,
                 callerName: callData.callerName,
-                callerProfilePic: callData.callerProfilePic
+                callerProfilePic: callData.callerProfilePic,
+                callType: callData.callType // Make sure we store this
             });
             // Set the call type based on what was received (default to video if not specified)
             setCallType(callData.callType || 'video');
@@ -997,7 +998,7 @@ const ChatWindow = (props) => {
         
         props.socket.on('call-accepted', (data) => {
             console.log('Call accepted:', data);
-            // Proceed with call setup
+            // Continue with the call - the caller will send an offer next
         });
         
         props.socket.on('call-rejected', () => {
