@@ -619,18 +619,32 @@ const VideoCall = ({
                          data.callerId === localUser.uid && 
                          data.calleeId === callee.uid);
         
-        if (!isForUs) return;
+        if (!isForUs) {
+          console.log('Ignoring ICE candidate not intended for us');
+          return;
+        }
         
         // Create an RTCIceCandidate
         const candidate = new RTCIceCandidate(data.candidate);
+        console.log(`ICE candidate type: ${candidate.type}, protocol: ${candidate.protocol}, address: ${candidate.address}`);
         
         // If peer connection exists and remote description is set, add candidate
         if (peerConnectionRef.current && remoteSdpSet.current) {
-          await peerConnectionRef.current.addIceCandidate(candidate);
-          console.log('Added ICE candidate');
+          console.log('Peer connection ready, adding ICE candidate directly');
+          try {
+            await peerConnectionRef.current.addIceCandidate(candidate);
+            console.log('Successfully added ICE candidate');
+            
+            // Check connection state after adding candidate
+            const iceState = peerConnectionRef.current.iceConnectionState;
+            console.log(`ICE connection state after adding candidate: ${iceState}`);
+          } catch (addErr) {
+            console.error('Error adding ICE candidate:', addErr);
+            // Even if we fail to add one candidate, don't give up - it's normal for some to fail
+          }
         } else {
           // Otherwise, store for later
-          console.log('Storing ICE candidate for later');
+          console.log('Storing ICE candidate for later - peer connection not ready');
           setPendingIceCandidates(prev => [...prev, candidate]);
         }
       } catch (err) {
@@ -681,16 +695,32 @@ const VideoCall = ({
             // Listen for ICE candidates
             peerConnectionRef.current.onicecandidate = (event) => {
               if (event.candidate) {
+                // Log the candidate for debugging
+                console.log(`Generated local ICE candidate:`, {
+                  type: event.candidate.type,
+                  protocol: event.candidate.protocol,
+                  address: event.candidate.address,
+                  port: event.candidate.port,
+                  candidateType: event.candidate.candidateType
+                });
+                
                 // Send the candidate to the remote peer
                 try {
+                  const targetId = isIncoming ? caller.uid : callee.uid;
+                  console.log(`Sending ICE candidate to ${isIncoming ? 'caller' : 'callee'} with ID ${targetId}`);
+                  
                   socket.emit('ice-candidate', {
                     candidate: event.candidate,
-                    callerId: caller.uid,
-                    calleeId: localUser.uid
+                    callerId: isIncoming ? caller.uid : localUser.uid,
+                    calleeId: isIncoming ? localUser.uid : callee.uid
                   });
                 } catch (socketError) {
                   console.error('Error sending ICE candidate via socket:', socketError);
+                  // ICE candidate errors are not fatal, so just log them
+                  console.warn('This may affect connection quality');
                 }
+              } else {
+                console.log('All ICE candidates have been generated');
               }
             };
             
@@ -846,26 +876,64 @@ const VideoCall = ({
         sdpSemantics: 'unified-plan'
       });
       
+      console.log(`Adding local tracks to peer connection (isIncoming: ${isIncoming})`);
       // Add local stream tracks to the connection
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => {
+        const tracks = localStreamRef.current.getTracks();
+        console.log(`Local stream has ${tracks.length} tracks to add:`, 
+          tracks.map(t => `${t.kind} (enabled: ${t.enabled}, muted: ${t.muted})`));
+        
+        tracks.forEach(track => {
+          console.log(`Adding ${track.kind} track to peer connection`);
           peerConnectionRef.current.addTrack(track, localStreamRef.current);
         });
       } else {
         console.error('No local stream available');
         await initializeCall();
         if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach(track => {
+          const tracks = localStreamRef.current.getTracks();
+          console.log(`Initialized stream has ${tracks.length} tracks`);
+          tracks.forEach(track => {
+            console.log(`Adding ${track.kind} track to peer connection after init`);
             peerConnectionRef.current.addTrack(track, localStreamRef.current);
           });
         }
       }
       
+      // Log all transceivers to check directionality
+      const transceivers = peerConnectionRef.current.getTransceivers();
+      transceivers.forEach((transceiver, i) => {
+        console.log(`Initial transceiver ${i}:`, {
+          mid: transceiver.mid,
+          direction: transceiver.direction,
+          currentDirection: transceiver.currentDirection,
+          kind: transceiver.receiver.track ? transceiver.receiver.track.kind : 'unknown'
+        });
+        
+        // Ensure bidirectional for both audio and video
+        if (!isAudioOnly || (isAudioOnly && transceiver.receiver.track && transceiver.receiver.track.kind === 'audio')) {
+          console.log(`Setting transceiver ${i} direction to sendrecv`);
+          transceiver.direction = 'sendrecv';
+        }
+      });
+      
       // Listen for ICE candidates
       peerConnectionRef.current.onicecandidate = (event) => {
         if (event.candidate) {
+          // Log the candidate for debugging
+          console.log(`Generated local ICE candidate:`, {
+            type: event.candidate.type,
+            protocol: event.candidate.protocol,
+            address: event.candidate.address,
+            port: event.candidate.port,
+            candidateType: event.candidate.candidateType
+          });
+          
           // Send the candidate to the remote peer
           try {
+            const targetId = isIncoming ? caller.uid : callee.uid;
+            console.log(`Sending ICE candidate to ${isIncoming ? 'caller' : 'callee'} with ID ${targetId}`);
+            
             socket.emit('ice-candidate', {
               candidate: event.candidate,
               callerId: isIncoming ? caller.uid : localUser.uid,
@@ -876,6 +944,8 @@ const VideoCall = ({
             // ICE candidate errors are not fatal, so just log them
             console.warn('This may affect connection quality');
           }
+        } else {
+          console.log('All ICE candidates have been generated');
         }
       };
       
@@ -1138,10 +1208,35 @@ const VideoCall = ({
       const isAudioOnlyCall = callType === 'audio';
       console.log(`Creating offer with callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
       
+      // Ensure all transceivers are set to sendrecv before creating offer
+      const transceivers = peerConnectionRef.current.getTransceivers();
+      transceivers.forEach(transceiver => {
+        // For audio-only, only set audio to sendrecv
+        if (isAudioOnlyCall && transceiver.receiver.track && transceiver.receiver.track.kind === 'audio') {
+          console.log(`Setting audio transceiver to sendrecv`);
+          transceiver.direction = 'sendrecv';
+        } 
+        // For video call, set all transceivers to sendrecv
+        else if (!isAudioOnlyCall) {
+          console.log(`Setting ${transceiver.receiver.track ? transceiver.receiver.track.kind : 'unknown'} transceiver to sendrecv`);
+          transceiver.direction = 'sendrecv';
+        }
+      });
+      
       const offer = await peerConnectionRef.current.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: !isAudioOnlyCall
+        offerToReceiveVideo: !isAudioOnlyCall,
+        voiceActivityDetection: true
       });
+      
+      console.log(`Offer SDP created:`, 
+        offer.sdp.split('\n').filter(line => 
+          line.includes('a=sendrecv') || 
+          line.includes('a=sendonly') || 
+          line.includes('a=recvonly') || 
+          line.includes('a=inactive')
+        )
+      );
       
       await peerConnectionRef.current.setLocalDescription(offer);
       
@@ -1178,10 +1273,35 @@ const VideoCall = ({
       const isAudioOnlyCall = callType === 'audio';
       console.log(`Creating answer with callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
       
+      // Ensure all transceivers are set to sendrecv before creating answer
+      const transceivers = peerConnectionRef.current.getTransceivers();
+      transceivers.forEach(transceiver => {
+        // For audio-only, only set audio to sendrecv
+        if (isAudioOnlyCall && transceiver.receiver.track && transceiver.receiver.track.kind === 'audio') {
+          console.log(`Setting audio transceiver to sendrecv`);
+          transceiver.direction = 'sendrecv';
+        } 
+        // For video call, set all transceivers to sendrecv
+        else if (!isAudioOnlyCall) {
+          console.log(`Setting ${transceiver.receiver.track ? transceiver.receiver.track.kind : 'unknown'} transceiver to sendrecv`);
+          transceiver.direction = 'sendrecv';
+        }
+      });
+      
       const answer = await peerConnectionRef.current.createAnswer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: !isAudioOnlyCall
+        offerToReceiveVideo: !isAudioOnlyCall,
+        voiceActivityDetection: true
       });
+      
+      console.log(`Answer SDP created:`, 
+        answer.sdp.split('\n').filter(line => 
+          line.includes('a=sendrecv') || 
+          line.includes('a=sendonly') || 
+          line.includes('a=recvonly') || 
+          line.includes('a=inactive')
+        )
+      );
       
       await peerConnectionRef.current.setLocalDescription(answer);
       
@@ -1416,17 +1536,58 @@ const VideoCall = ({
             return;
           }
           
+          // Log the answer SDP for debugging
+          console.log(`Processing answer SDP:`, 
+            data.answer.sdp.split('\n').filter(line => 
+              line.includes('a=sendrecv') || 
+              line.includes('a=sendonly') || 
+              line.includes('a=recvonly') || 
+              line.includes('a=inactive')
+            )
+          );
+          
           // Set the remote description (the answer)
+          console.log('Setting remote description from answer');
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
           remoteSdpSet.current = true;
+          
+          // Log the state of all transceivers after setting remote description
+          const transceivers = peerConnectionRef.current.getTransceivers();
+          transceivers.forEach((transceiver, i) => {
+            console.log(`Transceiver ${i} after answer:`, {
+              mid: transceiver.mid,
+              direction: transceiver.direction,
+              currentDirection: transceiver.currentDirection,
+              kind: transceiver.receiver.track ? transceiver.receiver.track.kind : 'unknown'
+            });
+          });
+          
+          // Force state check for the connection
+          const connectionState = peerConnectionRef.current.connectionState;
+          const iceConnectionState = peerConnectionRef.current.iceConnectionState;
+          console.log(`Connection state after answer: ${connectionState}, ICE state: ${iceConnectionState}`);
           
           // Add any pending ICE candidates
           if (pendingIceCandidates.length > 0) {
             console.log(`Adding ${pendingIceCandidates.length} pending ICE candidates`);
             for (const candidate of pendingIceCandidates) {
               await peerConnectionRef.current.addIceCandidate(candidate);
+              console.log('Added pending ICE candidate');
             }
             setPendingIceCandidates([]);
+          }
+          
+          // Ensure the peer connection is ready to receive remote tracks
+          if (iceConnectionState === 'new' || iceConnectionState === 'checking') {
+            console.log('Connection still being established, waiting for tracks...');
+          } else if (iceConnectionState === 'failed' || iceConnectionState === 'disconnected') {
+            console.warn('Connection in bad state, attempting to restart ICE');
+            
+            // Try to restart ICE if needed
+            if (peerConnectionRef.current.restartIce) {
+              console.log('Restarting ICE connection');
+              peerConnectionRef.current.restartIce();
+            }
           }
         }
       } catch (err) {
