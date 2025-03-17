@@ -2,7 +2,35 @@ import React, { useEffect, useState } from "react";
 import styles from "./recentchats.module.css"; // Import CSS as a module
 import ProfileHeader from "./profileheader";
 import EditProfileModal from "./EditProfileModal";
-import RecentChatsSkeleton from "./Loading/RecentChatsSkeleton";
+
+// Skeleton UI component for loading state
+const SkeletonRecentChats = () => {
+  return (
+    <div className={styles.recentChatsContainer}>
+      <div className={styles.recentChatsHeader}>
+        <div className={`${styles.skeletonText} ${styles.skeletonTitle}`}></div>
+        <div className={`${styles.skeletonButton}`}></div>
+      </div>
+      
+      <div className={styles.searchContainer}>
+        <div className={`${styles.skeletonSearch}`}></div>
+      </div>
+      
+      <div className={styles.chatList}>
+        {[...Array(5)].map((_, index) => (
+          <div className={styles.skeletonChatItem} key={index}>
+            <div className={styles.skeletonAvatar}></div>
+            <div className={styles.skeletonContent}>
+              <div className={styles.skeletonName}></div>
+              <div className={styles.skeletonMessage}></div>
+            </div>
+            <div className={styles.skeletonTime}></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const RecentChats = (props) => {
   const [user, setUser] = useState({}); // User object
@@ -24,12 +52,10 @@ const RecentChats = (props) => {
   }, []); // Empty dependency array since we don't need any dependencies
 
   useEffect(() => {  
-    setUser(prev => ({ ...prev, ...props.user }));
-    
-    // Simulate loading state
-    if (props.user && props.user.chats) {
-      // Set loading to false once we have the chats data
-      setIsLoading(false);
+    if (props.user) {
+      setUser(prev => ({ ...prev, ...props.user }));
+      // Set loading state based on whether chats array exists and has loaded
+      setIsLoading(!props.user.chats || props.user.chats.length === 0);
     }
   }, [props.user]);
 
@@ -45,9 +71,24 @@ const RecentChats = (props) => {
 
   const notifications = props.notifications; // Number of notifications
 
-  // Display skeleton UI when loading or when chats aren't available yet
-  if (isLoading || !user.chats) {
-    return <RecentChatsSkeleton />;
+  // If user or chats data is not loaded yet, show skeleton UI
+  if (isLoading) {
+    return (
+      <>
+        <ProfileHeader 
+          user={{
+            img: user.profilepicture || "",
+            username: user.username || "Loading...",
+            onlinestatus: 'offline',
+            id: user.uid || ""
+          }}
+          notifications={notifications}
+          onEditProfile={() => setShowEditProfile(true)}
+          isLoading={true}
+        />
+        <SkeletonRecentChats />
+      </>
+    );
   }
 
   const chats = user.chats; // Array of chat objects

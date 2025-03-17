@@ -1041,7 +1041,7 @@ function ChatApp() {
               handlesearchbtn={() => handleNavigation('searchSection')}
               user={{...user, chats: sortedChats}}
               notifications={notificationcount}
-              refreshUser={() => fetchUserData()}
+              refreshUser= {refreshUser}
               handleDeleteChat={handleDeleteChat}
             />
           </div>

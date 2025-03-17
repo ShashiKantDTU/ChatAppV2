@@ -2,8 +2,39 @@ import { useState } from 'react';
 import styles from './profileheader.module.css';
 import { FaBell, FaEdit, FaCopy } from 'react-icons/fa';
 
+// Skeleton UI for profile header when loading
+const SkeletonProfileHeader = () => {
+  return (
+    <header className={styles.header}>
+      <div className={styles.userInfo}>
+        <div className={styles.avatarContainer}>
+          <div className={`${styles.avatar} ${styles.skeletonAvatar}`}></div>
+          <div className={`${styles.statusIndicator} ${styles.skeletonStatus}`}></div>
+        </div>
+        
+        <div className={styles.userDetails}>
+          <div className={`${styles.skeletonText} ${styles.skeletonUsername}`}></div>
+          <div className={styles.uidRow}>
+            <div className={`${styles.skeletonText} ${styles.skeletonProfession}`}></div>
+          </div>
+        </div>
+      </div>
+      
+      <div className={styles.actions}>
+        <div className={`${styles.iconButton} ${styles.skeletonIconButton}`}></div>
+        <div className={`${styles.editButton} ${styles.skeletonEditButton}`}></div>
+      </div>
+    </header>
+  );
+};
+
 const ProfileHeader = (props) => {
   const [showTooltip, setShowTooltip] = useState(false);
+  
+  // If loading state is true, show skeleton UI
+  if (props.isLoading) {
+    return <SkeletonProfileHeader />;
+  }
   
   // Default avatar if not provided
   const defaultImg = '/user.png';

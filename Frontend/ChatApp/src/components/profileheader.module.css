@@ -57,6 +57,7 @@
   margin: 0;
   background: none;
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: var(--text-primary);
 }
 
@@ -200,4 +201,88 @@
 .lightTheme .editButton:hover {
   background-color: var(--accent-primary);
   border-color: var(--accent-primary);
+}
+
+/* Add these skeleton loading styles for ProfileHeader */
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+.skeletonText, 
+.skeletonAvatar, 
+.skeletonStatus, 
+.skeletonUsername, 
+.skeletonProfession, 
+.skeletonIconButton,
+.skeletonEditButton {
+  background: linear-gradient(90deg, 
+    rgba(var(--bg-secondary-rgb), 0.4) 25%, 
+    rgba(var(--bg-secondary-rgb), 0.6) 37%, 
+    rgba(var(--bg-secondary-rgb), 0.4) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 4px;
+}
+
+.skeletonAvatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--card-bg);
+}
+
+.skeletonStatus {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--card-bg);
+}
+
+.skeletonUsername {
+  height: 20px;
+  width: 120px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+}
+
+.skeletonProfession {
+  height: 14px;
+  width: 80px;
+  border-radius: 4px;
+}
+
+.skeletonIconButton {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.skeletonEditButton {
+  width: 100px;
+  height: 36px;
+  border-radius: 8px;
+}
+
+/* Light theme adjustments */
+:global(.lightTheme) .skeletonText, 
+:global(.lightTheme) .skeletonAvatar, 
+:global(.lightTheme) .skeletonStatus, 
+:global(.lightTheme) .skeletonUsername, 
+:global(.lightTheme) .skeletonProfession, 
+:global(.lightTheme) .skeletonIconButton,
+:global(.lightTheme) .skeletonEditButton {
+  background: linear-gradient(90deg, 
+    rgba(225, 225, 225, 0.6) 25%, 
+    rgba(240, 240, 240, 0.8) 37%, 
+    rgba(225, 225, 225, 0.6) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.5s infinite linear;
 }
