@@ -1060,468 +1060,462 @@ const ChatWindow = (props) => {
     };
 
     return (
-        <div className={`chat-window ${props.showChat ? 'show' : 'hide'}`}>
-            {props.showChat ? (
-                <div className="full-chat-window">
-                    <div className="chat-header">
-                        <div className="chat-header-left" onClick={() => {props.setShowChat(false); props.setShowSidebar(true)}}>
-                            <div className="chat-user-pic">
-                                <img src={props.activechat?.profilepicture} alt="user" />
-                            </div>
-                            <div className="chat-user-info">
-                                <h5>{props.activechat?.name}</h5>
-                                <p className='online-status'>
-                                    {props.activechat?.onlinestatus?.online ? 'Online' : 
-                                     `Last seen ${formatChatTime(props.activechat?.onlinestatus?.lastSeen)}`}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="chat-header-right">
-                            {/* Add call button */}
-                            <button 
-                                className="chat-call-button"
-                                onClick={startCall}
-                                title="Start voice call"
-                            >
-                                <PhoneCall size={20} />
-                            </button>
-                            {/* Existing delete button */}
-                            <button
-                                className="chat-delete-button"
-                                onClick={() => {
-                                    props.setShowDeleteConfirmation(true);
-                                    props.setDeleteConfirmationMessage(`Delete chat with ${props.activechat.name}?`);
-                                    props.setDeleteConfirmationType('chat');
-                                }}
-                                title="Delete chat"
-                            >
-                                <Trash2 size={20} />
-                            </button>
-                        </div>
+        <div className="chat-window">
+            <div className='chatheader'>
+                <div className='chatheaderleft'>
+                    {props.onBack && (
+                        <button 
+                            className='back-button'
+                            onClick={props.onBack}
+                            aria-label="Go back to recent chats"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M19 12H5M12 19l-7-7 7-7"/>
+                            </svg>
+                        </button>
+                    )}
+                    <img src={`${props.userdata.profilepicture}`} alt='props.userdata' className='chatheaderimg' />
+                    <div>
+                        <h3>{props.userdata.name}</h3>
+                        <p>{props.userdata?.onlinestatus.online ? <span style={{color:'green'}} >Online</span> : formatChatTime(props.userdata.onlinestatus.lastSeen)}</p>
                     </div>
-                    
-                    <div 
-                        id='chatarea' 
-                        className='chatarea'
-                        ref={chatAreaRef}
+                </div>
+                <div className='chatheaderright'>
+                    {/* Add call button */}
+                    <button 
+                        className='chatheaderbtn chat-call-button'
+                        onClick={startCall}
+                        title="Start voice call"
                     >
-                        {props.userdata.messages.map((message, index) => (
-                            <Message 
-                                key={index} 
-                                message={message} 
-                                userdata={props.userdata} 
-                                onReactionAdd={props.onReactionAdd} 
-                                onDeleteMessage={props.onDeleteMessage}
-                                onMediaClick={() => handleMediaPreview(message)}
-                            />
-                        ))}
-                        {props.isTyping && <TypingIndicator userdata={props.userdata} />}
-                        
-                        {/* Scroll to bottom button */}
-                        {showScrollButton && (
-                            <button 
-                                className={`scroll-to-bottom-btn ${hasNewMessages ? 'has-new-messages' : ''}`}
-                                onClick={handleScrollToBottom}
-                                aria-label="Scroll to latest messages"
-                            >
-                                <ArrowDown size={20} />
-                                {hasNewMessages && (
-                                    <>
-                                        <span className="new-message-dot"></span>
-                                        <span className="unread-count">{unreadCount}</span>
-                                    </>
-                                )}
-                            </button>
+                        <PhoneCall size={24} color='#4CAF50' />
+                    </button>
+                    <button className='chatheaderbtn'>
+                        <Video size={24} color='white' />
+                    </button>
+                </div>
+            </div>
+            
+            <div 
+                id='chatarea' 
+                className='chatarea'
+                ref={chatAreaRef}
+                onScroll={handleScroll}
+            >
+                {props.userdata.messages.map((message, index) => (
+                    <Message 
+                        key={index} 
+                        message={message} 
+                        userdata={props.userdata} 
+                        onReactionAdd={props.onReactionAdd} 
+                        onDeleteMessage={props.onDeleteMessage}
+                        onMediaClick={() => handleMediaPreview(message)}
+                    />
+                ))}
+                {props.isTyping && <TypingIndicator userdata={props.userdata} />}
+                
+                {/* Scroll to bottom button */}
+                {showScrollButton && (
+                    <button 
+                        className={`scroll-to-bottom-btn ${hasNewMessages ? 'has-new-messages' : ''}`}
+                        onClick={handleScrollToBottom}
+                        aria-label="Scroll to latest messages"
+                    >
+                        <ArrowDown size={20} />
+                        {hasNewMessages && (
+                            <>
+                                <span className="new-message-dot"></span>
+                                <span className="unread-count">{unreadCount}</span>
+                            </>
                         )}
-                    </div>
+                    </button>
+                )}
+            </div>
 
-                    <div className='inputarea'>
-                        <form className='inputarea-form' onSubmit={(e) => { e.preventDefault(); return false; }}>
-                            <input 
-                                type='file' 
-                                ref={fileInputRef}
-                                onChange={handleFileSelect}
-                                style={{ display: 'none' }}
-                                multiple
-                                accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/x-rar-compressed,application/x-7z-compressed,application/x-tar,text/*,application/json,application/xml,application/x-yaml,application/x-python-code,font/*"
-                            />
-                            
-                            <div className="input-buttons">
-                                <button 
-                                    type="button" 
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={isUploading || isRecording}
-                                >
-                                    <Paperclip size={20} />
-                                </button>
-                                <button 
-                                    type="button" 
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={isUploading || isRecording}
-                                >
-                                    <Image size={20} />
-                                </button>
-                                <button 
-                                    type="button"
-                                    onClick={isRecording ? stopRecording : startRecording}
-                                    className={`${isRecording ? 'recording' : ''} audio-record-btn`}
-                                    disabled={isUploading}
-                                >
-                                    {isRecording ? (
-                                        <div className="recording-animation">
-                                            <div className="pulse-ring"></div>
-                                            <Square size={20} />
-                                        </div>
-                                    ) : (
-                                        <Mic size={20} />
-                                    )}
-                                </button>
-                                <button 
-                                    type='submit' 
-                                    onClick={() => {
-                                        if (message.trim()) {
-                                            props.handlesend(message);
-                                            setMessage('');
-                                        }
-                                    }}
-                                    disabled={isUploading || isRecording}
-                                >
-                                    <Send size={20} />
-                                </button>
-                            </div>
-
+            <div className='inputarea'>
+                <form className='inputarea-form' onSubmit={(e) => { e.preventDefault(); return false; }}>
+                    <input 
+                        type='file' 
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        style={{ display: 'none' }}
+                        multiple
+                        accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/x-rar-compressed,application/x-7z-compressed,application/x-tar,text/*,application/json,application/xml,application/x-yaml,application/x-python-code,font/*"
+                    />
+                    
+                    <div className="input-buttons">
+                        <button 
+                            type="button" 
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading || isRecording}
+                        >
+                            <Paperclip size={20} />
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading || isRecording}
+                        >
+                            <Image size={20} />
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={isRecording ? stopRecording : startRecording}
+                            className={`${isRecording ? 'recording' : ''} audio-record-btn`}
+                            disabled={isUploading}
+                        >
                             {isRecording ? (
-                                <div className="recording-indicator">
-                                    <div className="recording-wave">
-                                        <div className="wave-bar"></div>
-                                        <div className="wave-bar"></div>
-                                        <div className="wave-bar"></div>
-                                    </div>
-                                    <span className="recording-time">{formatRecordingTime(recordingTime)}</span>
+                                <div className="recording-animation">
+                                    <div className="pulse-ring"></div>
+                                    <Square size={20} />
                                 </div>
                             ) : (
-                                <input 
-                                    type='text' 
-                                    value={message} 
-                                    onChange={(e) => {
-                                        props.handletyping(e);
-                                        setMessage(e.target.value);
-                                    }}
-                                    placeholder='Type a message'
-                                    disabled={isUploading || isRecording}
-                                />
+                                <Mic size={20} />
                             )}
-
-                            {isUploading && (
-                                <div className="upload-progress">
-                                    <div 
-                                        className="progress-bar" 
-                                        style={{ width: `${uploadProgress}%` }}
-                                    />
-                                    <span>{Math.round(uploadProgress)}%</span>
-                                </div>
-                            )}
-                        </form>
+                        </button>
+                        <button 
+                            type='submit' 
+                            onClick={() => {
+                                if (message.trim()) {
+                                    props.handlesend(message);
+                                    setMessage('');
+                                }
+                            }}
+                            disabled={isUploading || isRecording}
+                        >
+                            <Send size={20} />
+                        </button>
                     </div>
 
-                    {showPreview && selectedFiles.length > 0 && (
-                        <div className="file-preview-overlay">
-                            <div className="file-preview-content">
-                                <div className="file-preview-header">
-                                    <h3>Preview Files ({selectedFiles.length})</h3>
-                                    <button onClick={handleCancelUpload} className="close-preview">
-                                        <X size={20} />
+                    {isRecording ? (
+                        <div className="recording-indicator">
+                            <div className="recording-wave">
+                                <div className="wave-bar"></div>
+                                <div className="wave-bar"></div>
+                                <div className="wave-bar"></div>
+                            </div>
+                            <span className="recording-time">{formatRecordingTime(recordingTime)}</span>
+                        </div>
+                    ) : (
+                        <input 
+                            type='text' 
+                            value={message} 
+                            onChange={(e) => {
+                                props.handletyping(e);
+                                setMessage(e.target.value);
+                            }}
+                            placeholder='Type a message'
+                            disabled={isUploading || isRecording}
+                        />
+                    )}
+
+                    {isUploading && (
+                        <div className="upload-progress">
+                            <div 
+                                className="progress-bar" 
+                                style={{ width: `${uploadProgress}%` }}
+                            />
+                            <span>{Math.round(uploadProgress)}%</span>
+                        </div>
+                    )}
+                </form>
+            </div>
+            
+            {/* Call modal */}
+            <Call
+                isOpen={showCallModal}
+                onClose={handleCallModalClose}
+                remoteUser={callType === 'incoming' ? incomingCallData?.caller : props.userdata}
+                socket={props.socket}
+                localUser={props.user}
+                callType={callType}
+                initialOffer={callType === 'incoming' ? incomingCallData?.offer : null}
+            />
+            
+            {showPreview && selectedFiles.length > 0 && (
+                <div className="file-preview-overlay">
+                    <div className="file-preview-content">
+                        <div className="file-preview-header">
+                            <h3>Preview Files ({selectedFiles.length})</h3>
+                            <button onClick={handleCancelUpload} className="close-preview">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="file-preview-body">
+                            <div className="files-grid">
+                                {selectedFiles.map((file, index) => (
+                                    <div key={index} className="file-preview-item">
+                                        {file.type.startsWith('image/') ? (
+                                            <img 
+                                                src={URL.createObjectURL(file)} 
+                                                alt={`Preview ${index + 1}`} 
+                                                className="image-preview"
+                                            />
+                                        ) : (
+                                            <div className="file-info">
+                                                {getFileIcon(file.type)}
+                                                <p className="file-name">{file.name}</p>
+                                                <p className="file-size">{formatFileSize(file.size)}</p>
+                                                <p className="file-type">{file.type.split('/')[1].toUpperCase()}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="file-preview-footer">
+                            <button onClick={handleCancelUpload} className="cancel-button">
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={handleConfirmUpload} 
+                                className="send-button"
+                                disabled={isUploading}
+                            >
+                                {isUploading ? 'Uploading...' : 'Send All'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showUnsupportedDialog && (
+                <div className="file-preview-overlay">
+                    <div className="file-preview-content">
+                        <div className="file-preview-header">
+                            <h3>Unsupported Files</h3>
+                            <button onClick={() => setShowUnsupportedDialog(false)} className="close-preview">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="file-preview-body">
+                            <div className="unsupported-files">
+                                <AlertCircle size={24} className="alert-icon" />
+                                <p>The following files are not supported:</p>
+                                <ul>
+                                    {unsupportedFiles.map((file, index) => (
+                                        <li key={index}>
+                                            {file.name} ({file.type})
+                                        </li>
+                                    ))}
+                                </ul>
+                                <p>Supported file types: Images (JPEG, PNG, GIF, WebP), Videos (MP4, WebM), Audio (MP3, WAV), and Documents (PDF, DOC, DOCX)</p>
+                            </div>
+                        </div>
+                        <div className="file-preview-footer">
+                            <button 
+                                onClick={() => setShowUnsupportedDialog(false)} 
+                                className="send-button"
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Drag and Drop Overlay */}
+            {isDragging && (
+                <div className="drag-overlay active">
+                    <div className="drag-overlay-content">
+                        <Upload className="drag-overlay-icon" size={64} />
+                        <p className="drag-overlay-text">Drop files to send</p>
+                        <p className="drag-overlay-subtext">
+                            Supported files: Images, Videos, Audio, and Documents
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Audio Confirmation Dialog */}
+            {showAudioConfirmation && (
+                <div className="file-preview-overlay">
+                    <div className="file-preview-content audio-confirmation">
+                        <div className="file-preview-header">
+                            <h3>Voice Message Preview</h3>
+                            <button onClick={() => handleAudioConfirmation(false)} className="close-preview">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="file-preview-body">
+                            <div className="audio-preview-container">
+                                <div className="audio-player">
+                                    <button 
+                                        className="play-button"
+                                        onClick={toggleAudioPlayback}
+                                    >
+                                        {isPlaying ? <Pause size={24} /> : <Play size={24} />}
                                     </button>
+                                    <div className="audio-waveform">
+                                        <div className="waveform-bars">
+                                            {[...Array(20)].map((_, i) => (
+                                                <div key={i} className="waveform-bar"></div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <span className="audio-duration">
+                                        {isPlaying ? formatPlaybackTime(currentPlaybackTime) : formatRecordingTime(recordingTime)}
+                                    </span>
                                 </div>
-                                <div className="file-preview-body">
-                                    <div className="files-grid">
-                                        {selectedFiles.map((file, index) => (
-                                            <div key={index} className="file-preview-item">
-                                                {file.type.startsWith('image/') ? (
-                                                    <img 
-                                                        src={URL.createObjectURL(file)} 
-                                                        alt={`Preview ${index + 1}`} 
-                                                        className="image-preview"
-                                                    />
-                                                ) : (
-                                                    <div className="file-info">
-                                                        {getFileIcon(file.type)}
-                                                        <p className="file-name">{file.name}</p>
-                                                        <p className="file-size">{formatFileSize(file.size)}</p>
-                                                        <p className="file-type">{file.type.split('/')[1].toUpperCase()}</p>
-                                                    </div>
+                                <audio 
+                                    ref={audioRef} 
+                                    controls={false}
+                                    preload="auto"
+                                    onEnded={() => {
+                                        setIsPlaying(false);
+                                        if (playbackTimerRef.current) {
+                                            clearInterval(playbackTimerRef.current);
+                                        }
+                                        setCurrentPlaybackTime(0);
+                                    }}
+                                    onError={(e) => {
+                                        console.error('Audio playback error:', e);
+                                        setIsPlaying(false);
+                                        if (playbackTimerRef.current) {
+                                            clearInterval(playbackTimerRef.current);
+                                        }
+                                    }}
+                                    onLoadedMetadata={() => console.log('Audio metadata loaded')}
+                                />
+                            </div>
+                        </div>
+                        <div className="file-preview-footer">
+                            <button 
+                                onClick={() => handleAudioConfirmation(false)} 
+                                className="cancel-button"
+                            >
+                                <Trash2 size={16} />
+                                Delete
+                            </button>
+                            <button 
+                                onClick={() => handleAudioConfirmation(true)} 
+                                className="send-button"
+                            >
+                                Send Voice Message
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Media Preview Overlay */}
+            {showMediaPreview && previewMedia && (
+                <div className="file-preview-overlay">
+                    <div className="file-preview-content media-preview">
+                        <div className="file-preview-header">
+                            <h3>Media Preview</h3>
+                            <button onClick={handleCloseMediaPreview} className="close-preview">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="file-preview-body">
+                            <div className="media-preview-container">
+                                {previewMedia.media.type === 'image' && (
+                                    <div 
+                                        className="image-preview-wrapper"
+                                        onMouseDown={handleImageDragStart}
+                                        onMouseMove={handleImageDrag}
+                                        onMouseUp={handleImageDragEnd}
+                                        onMouseLeave={handleImageDragEnd}
+                                    >
+                                        {imageLoaded && (
+                                            <div className="image-info">
+                                                {imageDimensions.width} × {imageDimensions.height}
+                                                {previewMedia.media.size && (
+                                                    <span> • {formatFileSize(previewMedia.media.size)}</span>
                                                 )}
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="file-preview-footer">
-                                    <button onClick={handleCancelUpload} className="cancel-button">
-                                        Cancel
-                                    </button>
-                                    <button 
-                                        onClick={handleConfirmUpload} 
-                                        className="send-button"
-                                        disabled={isUploading}
-                                    >
-                                        {isUploading ? 'Uploading...' : 'Send All'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {showUnsupportedDialog && (
-                        <div className="file-preview-overlay">
-                            <div className="file-preview-content">
-                                <div className="file-preview-header">
-                                    <h3>Unsupported Files</h3>
-                                    <button onClick={() => setShowUnsupportedDialog(false)} className="close-preview">
-                                        <X size={20} />
-                                    </button>
-                                </div>
-                                <div className="file-preview-body">
-                                    <div className="unsupported-files">
-                                        <AlertCircle size={24} className="alert-icon" />
-                                        <p>The following files are not supported:</p>
-                                        <ul>
-                                            {unsupportedFiles.map((file, index) => (
-                                                <li key={index}>
-                                                    {file.name} ({file.type})
-                                                </li>
-                                            ))}
-                                        </ul>
-                                        <p>Supported file types: Images (JPEG, PNG, GIF, WebP), Videos (MP4, WebM), Audio (MP3, WAV), and Documents (PDF, DOC, DOCX)</p>
-                                    </div>
-                                </div>
-                                <div className="file-preview-footer">
-                                    <button 
-                                        onClick={() => setShowUnsupportedDialog(false)} 
-                                        className="send-button"
-                                    >
-                                        OK
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Drag and Drop Overlay */}
-                    {isDragging && (
-                        <div className="drag-overlay active">
-                            <div className="drag-overlay-content">
-                                <Upload className="drag-overlay-icon" size={64} />
-                                <p className="drag-overlay-text">Drop files to send</p>
-                                <p className="drag-overlay-subtext">
-                                    Supported files: Images, Videos, Audio, and Documents
-                                </p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Audio Confirmation Dialog */}
-                    {showAudioConfirmation && (
-                        <div className="file-preview-overlay">
-                            <div className="file-preview-content audio-confirmation">
-                                <div className="file-preview-header">
-                                    <h3>Voice Message Preview</h3>
-                                    <button onClick={() => handleAudioConfirmation(false)} className="close-preview">
-                                        <X size={20} />
-                                    </button>
-                                </div>
-                                <div className="file-preview-body">
-                                    <div className="audio-preview-container">
-                                        <div className="audio-player">
-                                            <button 
-                                                className="play-button"
-                                                onClick={toggleAudioPlayback}
-                                            >
-                                                {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+                                        )}
+                                        <div className="image-zoom-controls">
+                                            <button onClick={handleZoomOut} className="zoom-btn">
+                                                -
                                             </button>
-                                            <div className="audio-waveform">
-                                                <div className="waveform-bars">
-                                                    {[...Array(20)].map((_, i) => (
-                                                        <div key={i} className="waveform-bar"></div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                            <span className="audio-duration">
-                                                {isPlaying ? formatPlaybackTime(currentPlaybackTime) : formatRecordingTime(recordingTime)}
-                                            </span>
+                                            <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
+                                            <button onClick={handleZoomIn} className="zoom-btn">
+                                                +
+                                            </button>
+                                            <button onClick={handleResetZoom} className="zoom-reset-btn">
+                                                Reset
+                                            </button>
+                                            <button onClick={toggleImageDisplayMode} className="display-mode-btn">
+                                                {getDisplayModeText()}
+                                            </button>
                                         </div>
-                                        <audio 
-                                            ref={audioRef} 
-                                            controls={false}
-                                            preload="auto"
-                                            onEnded={() => {
-                                                setIsPlaying(false);
-                                                if (playbackTimerRef.current) {
-                                                    clearInterval(playbackTimerRef.current);
-                                                }
-                                                setCurrentPlaybackTime(0);
+                                        <img 
+                                            ref={imageRef}
+                                            src={previewMedia.media.url} 
+                                            alt={previewMedia.media.filename}
+                                            className={`preview-image ${imageDisplayMode === 'auto' ? 'preview-image-auto' : ''} ${!imageLoaded ? 'loading' : ''}`}
+                                            style={{
+                                                transform: `scale(${zoomLevel}) translate(${dragPosition.x}px, ${dragPosition.y}px)`,
+                                                cursor: zoomLevel > 1 ? 'move' : 'default',
+                                                objectFit: getObjectFitStyle()
                                             }}
-                                            onError={(e) => {
-                                                console.error('Audio playback error:', e);
-                                                setIsPlaying(false);
-                                                if (playbackTimerRef.current) {
-                                                    clearInterval(playbackTimerRef.current);
-                                                }
-                                            }}
-                                            onLoadedMetadata={() => console.log('Audio metadata loaded')}
+                                            onLoad={handleImageLoad}
                                         />
                                     </div>
-                                </div>
-                                <div className="file-preview-footer">
-                                    <button 
-                                        onClick={() => handleAudioConfirmation(false)} 
-                                        className="cancel-button"
-                                    >
-                                        <Trash2 size={16} />
-                                        Delete
-                                    </button>
-                                    <button 
-                                        onClick={() => handleAudioConfirmation(true)} 
-                                        className="send-button"
-                                    >
-                                        Send Voice Message
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Media Preview Overlay */}
-                    {showMediaPreview && previewMedia && (
-                        <div className="file-preview-overlay">
-                            <div className="file-preview-content media-preview">
-                                <div className="file-preview-header">
-                                    <h3>Media Preview</h3>
-                                    <button onClick={handleCloseMediaPreview} className="close-preview">
-                                        <X size={20} />
-                                    </button>
-                                </div>
-                                <div className="file-preview-body">
-                                    <div className="media-preview-container">
-                                        {previewMedia.media.type === 'image' && (
-                                            <div 
-                                                className="image-preview-wrapper"
-                                                onMouseDown={handleImageDragStart}
-                                                onMouseMove={handleImageDrag}
-                                                onMouseUp={handleImageDragEnd}
-                                                onMouseLeave={handleImageDragEnd}
-                                            >
-                                                {imageLoaded && (
-                                                    <div className="image-info">
-                                                        {imageDimensions.width} × {imageDimensions.height}
-                                                        {previewMedia.media.size && (
-                                                            <span> • {formatFileSize(previewMedia.media.size)}</span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                <div className="image-zoom-controls">
-                                                    <button onClick={handleZoomOut} className="zoom-btn">
-                                                        -
-                                                    </button>
-                                                    <span className="zoom-level">{Math.round(zoomLevel * 100)}%</span>
-                                                    <button onClick={handleZoomIn} className="zoom-btn">
-                                                        +
-                                                    </button>
-                                                    <button onClick={handleResetZoom} className="zoom-reset-btn">
-                                                        Reset
-                                                    </button>
-                                                    <button onClick={toggleImageDisplayMode} className="display-mode-btn">
-                                                        {getDisplayModeText()}
-                                                    </button>
-                                                </div>
-                                                <img 
-                                                    ref={imageRef}
-                                                    src={previewMedia.media.url} 
-                                                    alt={previewMedia.media.filename}
-                                                    className={`preview-image ${imageDisplayMode === 'auto' ? 'preview-image-auto' : ''} ${!imageLoaded ? 'loading' : ''}`}
-                                                    style={{
-                                                        transform: `scale(${zoomLevel}) translate(${dragPosition.x}px, ${dragPosition.y}px)`,
-                                                        cursor: zoomLevel > 1 ? 'move' : 'default',
-                                                        objectFit: getObjectFitStyle()
-                                                    }}
-                                                    onLoad={handleImageLoad}
+                                )}
+                                {previewMedia.media.type === 'video' && (
+                                    <div className="video-preview-wrapper">
+                                        <video 
+                                            ref={videoRef}
+                                            src={previewMedia.media.url}
+                                            controls
+                                            className="preview-video"
+                                        />
+                                        <div className="video-controls-wrapper">
+                                            <div className="volume-control">
+                                                <button 
+                                                    onClick={handleMuteToggle} 
+                                                    className="mute-btn"
+                                                >
+                                                    {isMuted ? 'Unmute' : 'Mute'}
+                                                </button>
+                                                <input 
+                                                    type="range" 
+                                                    min="0" 
+                                                    max="1" 
+                                                    step="0.1" 
+                                                    value={isMuted ? 0 : videoVolume}
+                                                    onChange={handleVolumeChange}
+                                                    className="volume-slider"
                                                 />
                                             </div>
-                                        )}
-                                        {previewMedia.media.type === 'video' && (
-                                            <div className="video-preview-wrapper">
-                                                <video 
-                                                    ref={videoRef}
-                                                    src={previewMedia.media.url}
-                                                    controls
-                                                    className="preview-video"
-                                                />
-                                                <div className="video-controls-wrapper">
-                                                    <div className="volume-control">
-                                                        <button 
-                                                            onClick={handleMuteToggle} 
-                                                            className="mute-btn"
-                                                        >
-                                                            {isMuted ? 'Unmute' : 'Mute'}
-                                                        </button>
-                                                        <input 
-                                                            type="range" 
-                                                            min="0" 
-                                                            max="1" 
-                                                            step="0.1" 
-                                                            value={isMuted ? 0 : videoVolume}
-                                                            onChange={handleVolumeChange}
-                                                            className="volume-slider"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                        {previewMedia.media.type === 'audio' && (
-                                            <div className="audio-preview-wrapper">
-                                                <audio 
-                                                    src={previewMedia.media.url}
-                                                    controls
-                                                    className="preview-audio"
-                                                />
-                                            </div>
-                                        )}
-                                        {previewMedia.media.type === 'file' && (
-                                            <div className="file-preview-wrapper">
-                                                <div className="file-info">
-                                                    {getFileIcon(previewMedia.media.mimeType)}
-                                                    <p className="file-name">{previewMedia.media.filename}</p>
-                                                    <p className="file-size">{formatFileSize(previewMedia.media.size)}</p>
-                                                    <p className="file-type">{previewMedia.media.mimeType.split('/')[1].toUpperCase()}</p>
-                                                </div>
-                                            </div>
-                                        )}
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="file-preview-footer">
-                                    <button 
-                                        onClick={() => handleMediaDownload(previewMedia.media.url, previewMedia.media.filename)}
-                                        className="download-button"
-                                    >
-                                        <Download size={16} />
-                                        Download
-                                    </button>
-                                </div>
+                                )}
+                                {previewMedia.media.type === 'audio' && (
+                                    <div className="audio-preview-wrapper">
+                                        <audio 
+                                            src={previewMedia.media.url}
+                                            controls
+                                            className="preview-audio"
+                                        />
+                                    </div>
+                                )}
+                                {previewMedia.media.type === 'file' && (
+                                    <div className="file-preview-wrapper">
+                                        <div className="file-info">
+                                            {getFileIcon(previewMedia.media.mimeType)}
+                                            <p className="file-name">{previewMedia.media.filename}</p>
+                                            <p className="file-size">{formatFileSize(previewMedia.media.size)}</p>
+                                            <p className="file-type">{previewMedia.media.mimeType.split('/')[1].toUpperCase()}</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
-                    )}
-
-                    {/* Call modal */}
-                    <Call
-                        isOpen={showCallModal}
-                        onClose={handleCallModalClose}
-                        remoteUser={callType === 'incoming' ? incomingCallData?.caller : props.activechat}
-                        socket={props.socket}
-                        localUser={props.user}
-                        callType={callType}
-                        initialOffer={callType === 'incoming' ? incomingCallData?.offer : null}
-                    />
+                        <div className="file-preview-footer">
+                            <button 
+                                onClick={() => handleMediaDownload(previewMedia.media.url, previewMedia.media.filename)}
+                                className="download-button"
+                            >
+                                <Download size={16} />
+                                Download
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            ) : null}
+            )}
         </div>
     );
 };
