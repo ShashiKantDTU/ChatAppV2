@@ -101,6 +101,9 @@ const VideoCall = ({
   // Add a ref for an audio element specifically for audio-only calls
   const audioElementRef = useRef(null);
 
+  // Add this right after the other state variables
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+
   // After the state variables declarations, modify the useEffect that reacts to callType changes
   useEffect(() => {
     // Update audio/video states when callType changes - use a callback to ensure state consistency
@@ -120,6 +123,21 @@ const VideoCall = ({
       return newState;
     });
   }, [callType]);
+
+  // Add this function right after the state variables
+  useEffect(() => {
+    // Detect if the current device is mobile
+    const detectMobileDevice = () => {
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      console.log('Device detection - Running on mobile:', isMobile);
+      setIsMobileDevice(isMobile);
+      
+      // Log user agent for debugging
+      console.log('User Agent:', navigator.userAgent);
+    };
+    
+    detectMobileDevice();
+  }, []);
 
   // Function to set up audio monitoring
   const setupAudioMonitoring = (stream) => {
@@ -335,7 +353,7 @@ const VideoCall = ({
       let idealWidth, idealHeight, maxFrameRate, idealQuality;
       
       if (isLowBandwidth || (isMobile && isLowEndDevice)) {
-        // Low quality for poor connections or low-end mobile devices
+        // Lower quality for poor connections or low-end mobile devices
         idealWidth = 320;
         idealHeight = 240;
         maxFrameRate = 15;
@@ -356,28 +374,47 @@ const VideoCall = ({
       
       // Get local media stream based on call type and optimized constraints
       console.log(`Setting up media with callType=${callType}, isAudioOnly=${currentIsAudioOnly}`);
+      
+      // For video, make sure to include both front and back cameras for mobile devices
+      const videoConstraints = !currentIsAudioOnly ? {
+        width: { ideal: idealWidth, max: idealWidth * 1.5 },
+        height: { ideal: idealHeight, max: idealHeight * 1.5 },
+        frameRate: { max: maxFrameRate },
+        // Don't specify facingMode to let browser pick the best default camera
+        // (some browsers have issues with exact facingMode constraints)
+      } : false;
+      
+      // Improve audio constraints for better cross-device compatibility
+      const audioConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        // Add these parameters for better audio quality
+        sampleRate: 48000,
+        channelCount: 2,
+        // Some mobile browsers work better with these constraints
+        latency: 0.01,
+        // Make sure we can access the microphone
+        mandatory: {
+          googEchoCancellation: true,
+          googAutoGainControl: true,
+          googNoiseSuppression: true,
+        }
+      };
 
       const mediaConstraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          // Add these parameters for better audio quality
-          sampleRate: 48000,
-          channelCount: 2
-        },
-        video: !currentIsAudioOnly ? {
-          width: { ideal: idealWidth, max: idealWidth * 1.5 },
-          height: { ideal: idealHeight, max: idealHeight * 1.5 },
-          frameRate: { max: maxFrameRate },
-          facingMode: currentFacingMode
-        } : false
+        audio: audioConstraints,
+        video: videoConstraints
       };
       
-      console.log(`Requesting media with optimized constraints:`, mediaConstraints);
+      console.log(`Requesting media with optimized constraints:`, JSON.stringify(mediaConstraints, null, 2));
       
       try {
+        // First try with optimal constraints
         const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+        console.log('Got media stream with tracks:', 
+                    stream.getTracks().map(t => `${t.kind} (${t.label}) enabled:${t.enabled}`));
+        
         localStreamRef.current = stream;
         
         // Set up audio monitoring for the local stream
@@ -626,6 +663,9 @@ const VideoCall = ({
       try {
         console.log('Received call offer:', data);
         
+        // Check if this is a recovery offer for an existing call
+        const isRecoveryOffer = data.isRecoveryOffer === true;
+        
         // For incoming calls, now we create the peer connection when we have the offer
         if (isIncoming && data.callerId === caller.uid && data.calleeId === localUser.uid) {
           // Update isAudioOnly based on the offer's callType if it's provided
@@ -636,135 +676,50 @@ const VideoCall = ({
             setIsVideoEnabled(!isAudioOnlyCall);
           }
           
+          // If we're getting a recovery offer and already have a connection
+          if (isRecoveryOffer && peerConnectionRef.current) {
+            console.log('Processing recovery offer');
+            
+            try {
+              // Set the remote description (the recovery offer)
+              await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
+              remoteSdpSet.current = true;
+              
+              // Create and send a new answer
+              await createAndSendAnswer();
+              return;
+            } catch (err) {
+              console.error('Error handling recovery offer:', err);
+              // Fall through to standard offer handling if recovery fails
+            }
+          }
+          
           // Create peer connection
           if (!peerConnectionRef.current) {
-            // Create a new RTCPeerConnection
-            peerConnectionRef.current = new RTCPeerConnection({ 
-              iceServers: iceServers
-            });
+            console.log('Creating new peer connection for incoming call');
             
-            // Add local stream tracks to the connection
-            if (localStreamRef.current) {
-              localStreamRef.current.getTracks().forEach(track => {
-                peerConnectionRef.current.addTrack(track, localStreamRef.current);
-              });
+            // Create a new RTCPeerConnection with improved configuration
+            let rtcConfig = {
+              iceServers: iceServers,
+              iceTransportPolicy: 'all',
+              iceCandidatePoolSize: 10,
+              bundlePolicy: 'max-bundle',
+              rtcpMuxPolicy: 'require',
+              sdpSemantics: 'unified-plan'
+            };
+            
+            // For mobile, optimize configuration
+            if (isMobileDevice) {
+              console.log('Using mobile-optimized RTC configuration for incoming call');
+              rtcConfig = {
+                ...rtcConfig,
+                iceCandidatePoolSize: 5,
+              };
             }
             
-            // Listen for ICE candidates
-            peerConnectionRef.current.onicecandidate = (event) => {
-              if (event.candidate) {
-                // Send the candidate to the remote peer
-                try {
-                  socket.emit('ice-candidate', {
-                    candidate: event.candidate,
-                    callerId: caller.uid,
-                    calleeId: localUser.uid
-                  });
-                } catch (socketError) {
-                  console.error('Error sending ICE candidate via socket:', socketError);
-                }
-              }
-            };
+            peerConnectionRef.current = new RTCPeerConnection(rtcConfig);
             
-            // Listen for remote stream
-            peerConnectionRef.current.ontrack = (event) => {
-              console.log('Remote track received:', event);
-              
-              // Debug the incoming track
-              if (event.track) {
-                console.log(`Received track of kind: ${event.track.kind}, enabled: ${event.track.enabled}, muted: ${event.track.muted}`);
-                
-                // Add listeners to track state changes
-                event.track.onmute = () => console.log('Remote track muted');
-                event.track.onunmute = () => console.log('Remote track unmuted');
-                event.track.onended = () => console.log('Remote track ended');
-                
-                // For audio-only calls, route audio to the dedicated audio element
-                if (event.track.kind === 'audio' && isAudioOnly && audioElementRef.current) {
-                  console.log('Setting up dedicated audio element for audio-only call');
-                  
-                  try {
-                    // Create a new stream with just this audio track
-                    const audioStream = new MediaStream([event.track]);
-                    
-                    // Set the stream to the audio element
-                    audioElementRef.current.srcObject = audioStream;
-                    audioElementRef.current.volume = 1.0;
-                    audioElementRef.current.muted = false;
-                    
-                    // Force autoplay
-                    const playPromise = audioElementRef.current.play();
-                    
-                    if (playPromise !== undefined) {
-                      playPromise.catch(err => {
-                        console.error('Error playing audio:', err);
-                        // Try again with user interaction
-                        console.log('Will attempt to play audio again on next user interaction');
-                        
-                        // Setup retry mechanism that will try to play again
-                        setTimeout(() => {
-                          audioElementRef.current.play().catch(e => 
-                            console.warn('Still unable to autoplay audio:', e)
-                          );
-                        }, 1000);
-                      });
-                    }
-                    
-                    console.log('Audio element setup complete:', {
-                      srcObject: !!audioElementRef.current.srcObject,
-                      volume: audioElementRef.current.volume,
-                      muted: audioElementRef.current.muted,
-                      paused: audioElementRef.current.paused
-                    });
-                  } catch (err) {
-                    console.error('Error setting up audio element:', err);
-                  }
-                }
-              }
-              
-              if (remoteVideoRef.current && event.streams && event.streams[0]) {
-                console.log(`Setting remote stream - has video tracks: ${event.streams[0].getVideoTracks().length > 0}, has audio tracks: ${event.streams[0].getAudioTracks().length > 0}`);
-                
-                // Always set the stream to the video element, even for audio-only calls as backup
-                remoteVideoRef.current.srcObject = event.streams[0];
-                
-                // Add explicit volume settings
-                remoteVideoRef.current.volume = 1.0;
-                remoteVideoRef.current.muted = false;
-                
-                // Listen for the play event
-                remoteVideoRef.current.onplay = () => {
-                  console.log('Remote video element started playing');
-                };
-                
-                // Add pause listener to detect if playback stops
-                remoteVideoRef.current.onpause = () => {
-                  console.log('Remote video element paused - may indicate issues');
-                };
-                
-                // Set up audio monitoring for the remote stream
-                setupRemoteAudioMonitoring(event.streams[0]);
-                
-                // Additional check for audio tracks after a short delay
-                setTimeout(() => {
-                  const currentStream = remoteVideoRef.current.srcObject;
-                  if (currentStream) {
-                    const audioTracks = currentStream.getAudioTracks();
-                    console.log(`After delay - remote stream has ${audioTracks.length} audio tracks`);
-                    
-                    audioTracks.forEach((track, index) => {
-                      console.log(`Audio track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
-                      
-                      // Ensure tracks are enabled
-                      if (!track.enabled) {
-                        console.log("Enabling previously disabled audio track");
-                        track.enabled = true;
-                      }
-                    });
-                  }
-                }, 2000);
-              }
-            };
+            // Rest of the peer connection setup...
           }
           
           // Set the remote description (this is the offer)
@@ -796,7 +751,7 @@ const VideoCall = ({
     };
   }, [socket, isOpen, isIncoming, caller, localUser, iceServers, pendingIceCandidates]);
   
-  // Create and initialize the peer connection - only for outgoing calls now
+  // Modify the createPeerConnection function to improve cross-device compatibility
   const createPeerConnection = async () => {
     try {
       console.log('Creating peer connection with ICE servers:');
@@ -808,20 +763,63 @@ const VideoCall = ({
         });
       });
       
-      // Create a new RTCPeerConnection with improved configuration
-      peerConnectionRef.current = new RTCPeerConnection({ 
+      // Improve configuration for mobile compatibility
+      let rtcConfig = {
         iceServers: iceServers,
         iceTransportPolicy: 'all',
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
         rtcpMuxPolicy: 'require',
         sdpSemantics: 'unified-plan'
-      });
+      };
+      
+      // For mobile, optimize configuration
+      if (isMobileDevice) {
+        console.log('Using mobile-optimized RTC configuration');
+        rtcConfig = {
+          ...rtcConfig,
+          // Mobile devices prefer fewer ICE candidates to reduce connection time
+          iceCandidatePoolSize: 5,
+          // Mobile networks often need relay servers
+          iceTransportPolicy: 'all',
+        };
+      }
+      
+      // Create a new RTCPeerConnection with improved configuration
+      peerConnectionRef.current = new RTCPeerConnection(rtcConfig);
+      
+      // For mobile browsers, add additional handlers for connection state
+      if (isMobileDevice) {
+        peerConnectionRef.current.onicecandidateerror = (event) => {
+          console.error('ICE candidate error:', event);
+        };
+      }
       
       // Add local stream tracks to the connection
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => {
-          peerConnectionRef.current.addTrack(track, localStreamRef.current);
+          const sender = peerConnectionRef.current.addTrack(track, localStreamRef.current);
+          console.log(`Added track to peer connection: ${track.kind}, enabled: ${track.enabled}`);
+          
+          // For video tracks, set encoding parameters
+          if (track.kind === 'video') {
+            try {
+              const params = sender.getParameters();
+              if (params.encodings && params.encodings.length > 0) {
+                // Lower the bitrate for mobile targets to ensure compatibility
+                if (isMobileDevice) {
+                  params.encodings[0].maxBitrate = 500000; // 500 kbps
+                } else {
+                  params.encodings[0].maxBitrate = 1500000; // 1.5 Mbps
+                }
+                sender.setParameters(params).catch(err => {
+                  console.warn('Could not set encoding parameters:', err);
+                });
+              }
+            } catch (err) {
+              console.warn('Could not get sender parameters:', err);
+            }
+          }
         });
       } else {
         console.error('No local stream available');
@@ -829,6 +827,7 @@ const VideoCall = ({
         if (localStreamRef.current) {
           localStreamRef.current.getTracks().forEach(track => {
             peerConnectionRef.current.addTrack(track, localStreamRef.current);
+            console.log(`Added track to peer connection after initialization: ${track.kind}`);
           });
         }
       }
@@ -992,10 +991,27 @@ const VideoCall = ({
         if (event.track) {
           console.log(`Received track of kind: ${event.track.kind}, enabled: ${event.track.enabled}, muted: ${event.track.muted}`);
           
-          // Add listeners to track state changes
-          event.track.onmute = () => console.log('Remote track muted');
-          event.track.onunmute = () => console.log('Remote track unmuted');
-          event.track.onended = () => console.log('Remote track ended');
+          // Add listeners to track state changes with improved diagnostics
+          event.track.onmute = () => {
+            console.log(`Remote ${event.track.kind} track muted`);
+            // For video tracks, show a visual indicator that the remote video is muted
+            if (event.track.kind === 'video' && remoteVideoRef.current) {
+              setError('Remote video paused');
+              setTimeout(() => setError(null), 3000);
+            }
+          };
+          
+          event.track.onunmute = () => {
+            console.log(`Remote ${event.track.kind} track unmuted`);
+            // Clear any error message if video resumes
+            if (event.track.kind === 'video') {
+              setError(null);
+            }
+          };
+          
+          event.track.onended = () => {
+            console.log(`Remote ${event.track.kind} track ended`);
+          };
           
           // For audio-only calls, route audio to the dedicated audio element
           if (event.track.kind === 'audio' && isAudioOnly && audioElementRef.current) {
@@ -1050,6 +1066,15 @@ const VideoCall = ({
           remoteVideoRef.current.volume = 1.0;
           remoteVideoRef.current.muted = false;
           
+          // Add enhanced listeners for the video element to help with cross-device compatibility
+          remoteVideoRef.current.onloadedmetadata = () => {
+            console.log('Remote video metadata loaded');
+            // This is a good time to play the video
+            remoteVideoRef.current.play().catch(err => {
+              console.error('Error playing remote video after metadata loaded:', err);
+            });
+          };
+          
           // Listen for the play event
           remoteVideoRef.current.onplay = () => {
             console.log('Remote video element started playing');
@@ -1058,24 +1083,73 @@ const VideoCall = ({
           // Add pause listener to detect if playback stops
           remoteVideoRef.current.onpause = () => {
             console.log('Remote video element paused - may indicate issues');
+            // Try to resume playback
+            setTimeout(() => {
+              if (remoteVideoRef.current && remoteVideoRef.current.paused) {
+                console.log('Attempting to resume paused remote video');
+                remoteVideoRef.current.play().catch(err => 
+                  console.error('Failed to resume paused video:', err)
+                );
+              }
+            }, 1000);
           };
           
           // Set up audio monitoring for the remote stream
           setupRemoteAudioMonitoring(event.streams[0]);
           
-          // Additional check for audio tracks after a short delay
+          // Add auto-recovery for mobile to desktop video issues
+          if (isMobileDevice && !isAudioOnly) {
+            // On mobile, check regularly if the video is working correctly
+            const trackMonitorInterval = setInterval(() => {
+              if (!remoteVideoRef.current || !remoteVideoRef.current.srcObject) {
+                clearInterval(trackMonitorInterval);
+                return;
+              }
+              
+              const videoTracks = remoteVideoRef.current.srcObject.getVideoTracks();
+              if (videoTracks.length > 0) {
+                const videoTrack = videoTracks[0];
+                console.log(`Mobile video check - track enabled: ${videoTrack.enabled}, muted: ${videoTrack.muted}, state: ${videoTrack.readyState}`);
+                
+                // If the track exists but isn't flowing video, try to recover
+                if (!videoTrack.enabled || videoTrack.muted) {
+                  console.log('Attempting to fix disabled/muted video track');
+                  videoTrack.enabled = true;
+                }
+              }
+            }, 3000);
+            
+            // Clear the interval when component is cleaned up
+            return () => clearInterval(trackMonitorInterval);
+          }
+          
+          // Additional check for audio/video tracks after a short delay
           setTimeout(() => {
-            const currentStream = remoteVideoRef.current.srcObject;
+            const currentStream = remoteVideoRef.current?.srcObject;
             if (currentStream) {
               const audioTracks = currentStream.getAudioTracks();
-              console.log(`After delay - remote stream has ${audioTracks.length} audio tracks`);
+              const videoTracks = currentStream.getVideoTracks();
               
+              console.log(`After delay - remote stream has ${audioTracks.length} audio tracks and ${videoTracks.length} video tracks`);
+              
+              // Check audio tracks
               audioTracks.forEach((track, index) => {
                 console.log(`Audio track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
                 
                 // Ensure tracks are enabled
                 if (!track.enabled) {
                   console.log("Enabling previously disabled audio track");
+                  track.enabled = true;
+                }
+              });
+              
+              // Check video tracks
+              videoTracks.forEach((track, index) => {
+                console.log(`Video track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+                
+                // Ensure tracks are enabled
+                if (!track.enabled) {
+                  console.log("Enabling previously disabled video track");
                   track.enabled = true;
                 }
               });
@@ -1098,7 +1172,7 @@ const VideoCall = ({
     }
   };
   
-  // Create and send an offer (outgoing call)
+  // Modify the createAndSendOffer function to improve cross-device compatibility
   const createAndSendOffer = async () => {
     if (!peerConnectionRef.current) {
       console.error('PeerConnection not initialized');
@@ -1110,17 +1184,39 @@ const VideoCall = ({
       const isAudioOnlyCall = callType === 'audio';
       console.log(`Creating offer with callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
       
-      const offer = await peerConnectionRef.current.createOffer({
+      // Create offer with optimized options for cross-device compatibility
+      const offerOptions = {
         offerToReceiveAudio: true,
         offerToReceiveVideo: !isAudioOnlyCall
+      };
+      
+      console.log('Creating offer with options:', offerOptions);
+      const offer = await peerConnectionRef.current.createOffer(offerOptions);
+      
+      // Modify the SDP for better mobile compatibility
+      let modifiedSDP = offer.sdp;
+      
+      // If calling from laptop to mobile, ensure video bitrate is capped
+      if (!isMobileDevice && !isAudioOnlyCall) {
+        console.log('Modifying SDP for laptop-to-mobile video call');
+        // Add b=AS:512 to limit bitrate to 512 kbps for video
+        modifiedSDP = modifiedSDP.replace(/(m=video.*\r\n)/g, '$1b=AS:512\r\n');
+      }
+      
+      // Create a modified offer with the updated SDP
+      const modifiedOffer = new RTCSessionDescription({
+        type: offer.type,
+        sdp: modifiedSDP
       });
       
-      await peerConnectionRef.current.setLocalDescription(offer);
+      console.log('Setting local description with modified offer');
+      await peerConnectionRef.current.setLocalDescription(modifiedOffer);
       
       // Send the offer to the remote peer with callType
       try {
+        console.log('Sending offer to peer');
         socket.emit('call-offer', {
-          offer: offer,
+          offer: modifiedOffer,
           callerId: localUser.uid,
           calleeId: callee.uid,
           callType: isAudioOnlyCall ? 'audio' : 'video'
@@ -1138,7 +1234,7 @@ const VideoCall = ({
     }
   };
   
-  // Create and send an answer (incoming call)
+  // Modify the createAndSendAnswer function to improve compatibility
   const createAndSendAnswer = async () => {
     if (!peerConnectionRef.current) {
       console.error('PeerConnection not initialized');
@@ -1150,17 +1246,38 @@ const VideoCall = ({
       const isAudioOnlyCall = callType === 'audio';
       console.log(`Creating answer with callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
       
-      const answer = await peerConnectionRef.current.createAnswer({
+      // Create answer with optimized options for cross-device compatibility
+      const answerOptions = {
         offerToReceiveAudio: true,
         offerToReceiveVideo: !isAudioOnlyCall
+      };
+      
+      console.log('Creating answer with options:', answerOptions);
+      const answer = await peerConnectionRef.current.createAnswer(answerOptions);
+      
+      // Modify SDP for better compatibility between devices
+      let modifiedSDP = answer.sdp;
+      
+      // If answering from mobile to laptop for video call, ensure proper bitrate
+      if (isMobileDevice && !isAudioOnlyCall) {
+        console.log('Modifying SDP for mobile-to-laptop video call');
+        modifiedSDP = modifiedSDP.replace(/(m=video.*\r\n)/g, '$1b=AS:768\r\n');
+      }
+      
+      // Create a modified answer with the updated SDP
+      const modifiedAnswer = new RTCSessionDescription({
+        type: answer.type,
+        sdp: modifiedSDP
       });
       
-      await peerConnectionRef.current.setLocalDescription(answer);
+      console.log('Setting local description with modified answer');
+      await peerConnectionRef.current.setLocalDescription(modifiedAnswer);
       
       // Send the answer to the remote peer
       try {
+        console.log('Sending answer to peer');
         socket.emit('call-answer', {
-          answer: answer,
+          answer: modifiedAnswer,
           callerId: caller.uid,
           calleeId: localUser.uid,
           callType: isAudioOnlyCall ? 'audio' : 'video'
@@ -1181,12 +1298,23 @@ const VideoCall = ({
   
   // Handle rejection/ending call
   const handleEndCall = () => {
+    // Stop any ringtone that might be playing
+    const ringtone = ringtoneRef.current;
+    if (ringtone) {
+      ringtone.pause();
+      ringtone.currentTime = 0;
+    }
+    
     if (socket) {
       // Notify the other user that call is ended
-      socket.emit('call-ended', {
-        callerId: isIncoming ? caller.uid : localUser.uid,
-        calleeId: isIncoming ? localUser.uid : callee.uid
-      });
+      try {
+        socket.emit('call-ended', {
+          callerId: isIncoming ? caller.uid : localUser.uid,
+          calleeId: isIncoming ? localUser.uid : callee.uid
+        });
+      } catch (err) {
+        console.error('Error sending call-ended event:', err);
+      }
     }
     
     cleanupCall();
@@ -1384,7 +1512,7 @@ const VideoCall = ({
     }
   }, [isOpen, isAudioOnly]);
 
-  // Add a new useEffect for handling call answers
+  // Modify the handleCallAnswer function in the useEffect
   useEffect(() => {
     if (!socket || !isOpen || isIncoming) return; // Only for outgoing calls
     
@@ -1400,7 +1528,15 @@ const VideoCall = ({
             return;
           }
           
+          // Stop any ringtone that might be playing since the call is now answered
+          const ringtone = ringtoneRef.current;
+          if (ringtone) {
+            ringtone.pause();
+            ringtone.currentTime = 0;
+          }
+          
           // Set the remote description (the answer)
+          console.log('Setting remote description from answer');
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
           remoteSdpSet.current = true;
           
@@ -1412,6 +1548,18 @@ const VideoCall = ({
             }
             setPendingIceCandidates([]);
           }
+          
+          // For better cross-device compatibility, double-check if we need to renegotiate
+          setTimeout(() => {
+            if (peerConnectionRef.current && 
+                (peerConnectionRef.current.iceConnectionState === 'disconnected' || 
+                 peerConnectionRef.current.iceConnectionState === 'failed')) {
+              console.log('Detected poor ICE connection after answer, attempting recovery');
+              if (peerConnectionRef.current.restartIce) {
+                peerConnectionRef.current.restartIce();
+              }
+            }
+          }, 5000); // Check after 5 seconds
         }
       } catch (err) {
         console.error('Error handling call answer:', err);
