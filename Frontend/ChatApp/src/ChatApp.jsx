@@ -936,6 +936,8 @@ function ChatApp() {
 
     // Global call handlers
     const handleStartCall = (calleeUser, audioOnly = false) => {
+        if (!calleeUser || !socket || !user) return;
+        
         setIsIncomingCall(false);
         setCallInfo(null);
         setTalkingToUser(calleeUser); // Make sure we're talking to the callee
@@ -944,7 +946,7 @@ function ChatApp() {
     };
     
     const handleAcceptCall = () => {
-        if (!socket || !callInfo) return;
+        if (!socket || !callInfo || !user?.uid) return;
         
         socket.emit('call-accepted', {
             callerId: callInfo.callerId,
@@ -953,7 +955,7 @@ function ChatApp() {
     };
     
     const handleRejectCall = () => {
-        if (!socket || !callInfo) return;
+        if (!socket || !callInfo || !user?.uid) return;
         
         socket.emit('call-rejected', {
             callerId: callInfo.callerId,
@@ -965,6 +967,8 @@ function ChatApp() {
     };
     
     const handleEndCall = () => {
+        if (!socket) return;
+        
         setShowCallUI(false);
         setCallInfo(null);
     };
@@ -1036,7 +1040,7 @@ function ChatApp() {
           )}
           
           {/* Add VideoCall overlay that's visible regardless of current section */}
-          {socket && (
+          {socket && user && (
             <div 
               style={{
                 ...videoCallOverlayStyle,
@@ -1052,12 +1056,21 @@ function ChatApp() {
                   name: callInfo?.callerName || 'Unknown',
                   profilepicture: callInfo?.callerProfilePic || ''
                 } : null}
-                callee={!isIncomingCall && talkingToUser ? talkingToUser : null}
+                callee={!isIncomingCall && talkingToUser ? {
+                  uid: talkingToUser?.uid || '',
+                  name: talkingToUser?.name || 'Unknown',
+                  profilepicture: talkingToUser?.profilepicture || ''
+                } : null}
                 onAccept={handleAcceptCall}
                 onReject={handleRejectCall}
                 socket={socket}
-                localUser={user}
-                callType={callType}
+                localUser={user ? {
+                  uid: user.uid || '',
+                  name: user.name || user.username || 'Me',
+                  profilepicture: user.profilepicture || '',
+                  email: user.email || ''
+                } : null}
+                callType={callType || 'video'}
               />
             </div>
           )}
