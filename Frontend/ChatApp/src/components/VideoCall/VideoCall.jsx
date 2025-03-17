@@ -44,7 +44,8 @@ const VideoCall = ({
   onAccept, 
   onReject, 
   socket, 
-  localUser 
+  localUser,
+  callType = 'video' // 'video' or 'audio'
 }) => {
   // Call states
   const [isCallActive, setIsCallActive] = useState(false);
@@ -53,7 +54,8 @@ const VideoCall = ({
   
   // Media controls
   const [isMuted, setIsMuted] = useState(false);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(callType === 'video');
+  const [isAudioOnly, setIsAudioOnly] = useState(callType === 'audio');
   
   // Media elements
   const localVideoRef = useRef(null);
@@ -72,6 +74,12 @@ const VideoCall = ({
   
   // Audio refs for notifications
   const ringtoneRef = useRef(new Audio(RINGTONE_URL));
+  
+  // Update isAudioOnly when callType changes
+  useEffect(() => {
+    setIsAudioOnly(callType === 'audio');
+    setIsVideoEnabled(callType === 'video');
+  }, [callType]);
   
   // Fetch fresh ICE server credentials from Metered.ca
   useEffect(() => {
@@ -155,6 +163,12 @@ const VideoCall = ({
     const handleCallOffer = async (data) => {
       console.log('Call offer received:', data);
       
+      // If the call offer includes type information, update our state
+      if (data.callType) {
+        setIsAudioOnly(data.callType === 'audio');
+        setIsVideoEnabled(data.callType === 'video');
+      }
+      
       try {
         if (!peerConnectionRef.current) {
           await createPeerConnection();
@@ -211,11 +225,14 @@ const VideoCall = ({
     try {
       setIsLoading(true);
       
-      // Get local media stream
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: true, 
-        video: true 
-      });
+      // Get local media stream based on call type
+      const mediaConstraints = {
+        audio: true,
+        video: !isAudioOnly
+      };
+      
+      console.log(`Requesting media with constraints:`, mediaConstraints);
+      const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
       
       localStreamRef.current = stream;
       
@@ -231,7 +248,10 @@ const VideoCall = ({
       }
     } catch (err) {
       console.error("Error accessing media devices:", err);
-      setError("Could not access camera or microphone. Please check permissions.");
+      const errorMessage = isAudioOnly 
+        ? "Could not access microphone. Please check permissions." 
+        : "Could not access camera or microphone. Please check permissions.";
+      setError(errorMessage);
       setIsLoading(false);
     }
   };
@@ -265,8 +285,6 @@ const VideoCall = ({
       peerConnectionRef.current.onicecandidate = (event) => {
         if (event.candidate) {
           // Send the candidate to the remote peer
-          const otherUserId = isIncoming ? caller.uid : callee.uid;
-          
           socket.emit('ice-candidate', {
             candidate: event.candidate,
             callerId: isIncoming ? caller.uid : localUser.uid,
@@ -329,16 +347,17 @@ const VideoCall = ({
     try {
       const offer = await peerConnectionRef.current.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: true
+        offerToReceiveVideo: !isAudioOnly
       });
       
       await peerConnectionRef.current.setLocalDescription(offer);
       
-      // Send the offer to the remote peer
+      // Send the offer to the remote peer with callType
       socket.emit('call-offer', {
         offer: offer,
         callerId: localUser.uid,
-        calleeId: callee.uid
+        calleeId: callee.uid,
+        callType: isAudioOnly ? 'audio' : 'video'
       });
     } catch (err) {
       console.error('Error creating offer:', err);
@@ -382,7 +401,8 @@ const VideoCall = ({
       callerId: localUser.uid,
       callerName: localUser.username || localUser.name,
       calleeId: callee.uid,
-      callerProfilePic: localUser.profilepicture
+      callerProfilePic: localUser.profilepicture,
+      callType: isAudioOnly ? 'audio' : 'video'
     });
   };
   
@@ -453,6 +473,8 @@ const VideoCall = ({
   
   // Toggle camera
   const toggleVideo = () => {
+    if (isAudioOnly) return; // Don't toggle video in audio-only calls
+    
     if (localStreamRef.current) {
       const videoTracks = localStreamRef.current.getVideoTracks();
       videoTracks.forEach(track => {
@@ -499,7 +521,7 @@ const VideoCall = ({
   const showCallNotification = () => {
     // Check if browser notifications are supported and permission is granted
     if ('Notification' in window && Notification.permission === 'granted') {
-      const notification = new Notification('Incoming Video Call', {
+      const notification = new Notification(`Incoming ${isAudioOnly ? 'Voice' : 'Video'} Call`, {
         body: `${caller.name || 'Someone'} is calling you`,
         icon: caller.profilepicture || '',
         requireInteraction: true
@@ -522,10 +544,10 @@ const VideoCall = ({
         <div className="video-call-header">
           <h3>
             {isCallActive
-              ? "Call in progress"
+              ? `${isAudioOnly ? 'Voice' : 'Video'} Call in progress`
               : isIncoming
-                ? "Incoming Call"
-                : "Calling..."}
+                ? `Incoming ${isAudioOnly ? 'Voice' : 'Video'} Call`
+                : `${isAudioOnly ? 'Calling' : 'Video Calling'}...`}
           </h3>
           <span className="call-duration">
             {isCallActive && formatDuration(callDuration)}
@@ -535,57 +557,97 @@ const VideoCall = ({
           </button>
         </div>
         
-        <div className="video-streams">
-          <div className="remote-video-container">
-            {isLoading ? (
-              <div className="loading-indicator">
-                <div className="spinner"></div>
-                <p>Connecting...</p>
+        <div className={`video-streams ${isAudioOnly ? 'audio-only' : ''}`}>
+          {isAudioOnly ? (
+            <div className="audio-only-container">
+              <div className="audio-only-avatar">
+                <img 
+                  src={isIncoming ? caller.profilepicture : callee.profilepicture} 
+                  alt={isIncoming ? caller.name : callee.name}
+                />
               </div>
-            ) : error ? (
-              <div className="error-message">
-                <p>{error}</p>
+              <h2>{isIncoming ? caller.name : callee.name}</h2>
+              
+              {isCallActive && (
+                <div className="audio-waves">
+                  <div className="audio-wave"></div>
+                  <div className="audio-wave"></div>
+                  <div className="audio-wave"></div>
+                  <div className="audio-wave"></div>
+                  <div className="audio-wave"></div>
+                </div>
+              )}
+              
+              {isLoading && (
+                <div className="loading-indicator">
+                  <div className="spinner"></div>
+                  <p>Connecting...</p>
+                </div>
+              )}
+              {error && (
+                <div className="error-message">
+                  <p>{error}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="remote-video-container">
+                {isLoading ? (
+                  <div className="loading-indicator">
+                    <div className="spinner"></div>
+                    <p>Connecting...</p>
+                  </div>
+                ) : error ? (
+                  <div className="error-message">
+                    <p>{error}</p>
+                  </div>
+                ) : (
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className="remote-video"
+                  />
+                )}
               </div>
-            ) : (
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="remote-video"
-              />
-            )}
-          </div>
-          
-          <div className="local-video-container">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="local-video"
-            />
-          </div>
+              
+              <div className="local-video-container">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="local-video"
+                />
+              </div>
+            </>
+          )}
         </div>
         
         <div className="call-info">
           <div className="user-info">
-            {isIncoming ? (
+            {!isAudioOnly && (
               <>
-                <img 
-                  src={caller.profilepicture} 
-                  alt={caller.name} 
-                  className="caller-avatar" 
-                />
-                <h4>{caller.name}</h4>
-              </>
-            ) : (
-              <>
-                <img 
-                  src={callee.profilepicture} 
-                  alt={callee.name} 
-                  className="callee-avatar" 
-                />
-                <h4>{callee.name}</h4>
+                {isIncoming ? (
+                  <>
+                    <img 
+                      src={caller.profilepicture} 
+                      alt={caller.name} 
+                      className="caller-avatar" 
+                    />
+                    <h4>{caller.name}</h4>
+                  </>
+                ) : (
+                  <>
+                    <img 
+                      src={callee.profilepicture} 
+                      alt={callee.name} 
+                      className="callee-avatar" 
+                    />
+                    <h4>{callee.name}</h4>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -630,13 +692,15 @@ const VideoCall = ({
                 <span>End</span>
               </button>
               
-              <button
-                className={`call-control-button ${!isVideoEnabled ? 'disabled' : ''}`}
-                onClick={toggleVideo}
-              >
-                {isVideoEnabled ? <Video size={24} /> : <VideoOff size={24} />}
-                <span>{isVideoEnabled ? 'Hide Video' : 'Show Video'}</span>
-              </button>
+              {!isAudioOnly && (
+                <button
+                  className={`call-control-button ${!isVideoEnabled ? 'disabled' : ''}`}
+                  onClick={toggleVideo}
+                >
+                  {isVideoEnabled ? <Video size={24} /> : <VideoOff size={24} />}
+                  <span>{isVideoEnabled ? 'Hide Video' : 'Show Video'}</span>
+                </button>
+              )}
             </>
           )}
         </div>

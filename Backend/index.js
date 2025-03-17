@@ -862,7 +862,7 @@ io.on('connection', (socket) => {
         try {
             console.log('Call request received:', data);
             
-            const { callerId, callerName, calleeId, callerProfilePic } = data;
+            const { callerId, callerName, calleeId, callerProfilePic, callType = 'video' } = data;
             
             // Find receiver by uid
             const receiver = await User.findOne({ uid: calleeId });
@@ -881,7 +881,8 @@ io.on('connection', (socket) => {
                 callerId,
                 callerName,
                 callerProfilePic,
-                calleeId
+                calleeId,
+                callType
             });
         } catch (error) {
             console.error('Error in call-user handler:', error);
@@ -936,7 +937,7 @@ io.on('connection', (socket) => {
         try {
             console.log('Call offer received:', data);
             
-            const { offer, callerId, calleeId } = data;
+            const { offer, callerId, calleeId, callType } = data;
             
             // Find callee by uid
             const callee = await User.findOne({ uid: calleeId });
@@ -948,7 +949,8 @@ io.on('connection', (socket) => {
             io.to(callee.socketid).emit('call-offer', {
                 offer,
                 callerId,
-                calleeId
+                calleeId,
+                callType
             });
         } catch (error) {
             console.error('Error in call-offer handler:', error);

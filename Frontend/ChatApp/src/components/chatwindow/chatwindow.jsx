@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import './chatwindow.css';
-import { Video, Check, Image, Paperclip, Send, X, AlertCircle, Upload, Mic, Square, File, FileText, FileCode, FileSpreadsheet, Presentation, FileArchive, Type, Play, Pause, Trash2, Download, ArrowDown } from 'lucide-react';
+import { Video, Check, Image, Paperclip, Send, X, AlertCircle, Upload, Mic, Square, File, FileText, FileCode, FileSpreadsheet, Presentation, FileArchive, Type, Play, Pause, Trash2, Download, ArrowDown, Phone } from 'lucide-react';
 import Message from './message';
 import scrollToBottom from '../../../scripts/scrolltobottom';
 import TypingIndicator from './typingindicator';
@@ -61,6 +61,7 @@ const ChatWindow = (props) => {
     const [showCallUI, setShowCallUI] = useState(false);
     const [isIncomingCall, setIsIncomingCall] = useState(false);
     const [callInfo, setCallInfo] = useState(null);
+    const [callType, setCallType] = useState('video');
     
     // Call the hook to get forceUpdate function
     const forceUpdate = useForceUpdate();
@@ -1021,6 +1022,16 @@ const ChatWindow = (props) => {
     const handleStartCall = () => {
         setIsIncomingCall(false);
         setShowCallUI(true);
+        // Default to video call
+        setCallType('video');
+    };
+    
+    // Handle starting a voice call
+    const handleVoiceCall = () => {
+        setIsIncomingCall(false);
+        setShowCallUI(true);
+        // Set call type to audio only
+        setCallType('audio');
     };
     
     // Handle accepting a call
@@ -1074,7 +1085,10 @@ const ChatWindow = (props) => {
                     </div>
                 </div>
                 <div className='chatheaderright'>
-                    <button className='chatheaderbtn' onClick={handleStartCall}>
+                    <button className='chatheaderbtn' onClick={handleVoiceCall} title="Voice Call">
+                        <Phone size={24} color='white' />
+                    </button>
+                    <button className='chatheaderbtn' onClick={handleStartCall} title="Video Call">
                         <Video size={24} color='white' />
                     </button>
                 </div>
@@ -1504,6 +1518,7 @@ const ChatWindow = (props) => {
                 onReject={handleRejectCall}
                 socket={props.socket}
                 localUser={props.localUser}
+                callType={callType}
             />
         </div>
     );
