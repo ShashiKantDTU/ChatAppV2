@@ -6,33 +6,37 @@ import './VideoCall.css';
 const RINGTONE_URL = 'https://cdn.pixabay.com/audio/2022/11/20/audio_662f2ae340.mp3';
 
 // Metered API key for TURN server credentials
-const METERED_API_KEY = "54802f233bc4f94626bf76e1";
+const METERED_API_KEY = "0b3cef3685935b3424354cbea99c073db622";
 
 // Fallback ICE servers with hardcoded credentials
 const FALLBACK_ICE_SERVERS = [
+  {
+    urls: "stun:stun.l.google.com:19302"
+  },
+  {
+    urls: "stun:stun1.l.google.com:19302"
+  },
+  {
+    urls: "stun:stun2.l.google.com:19302"
+  },
   {
     urls: "stun:stun.relay.metered.ca:80",
   },
   {
     urls: "turn:global.relay.metered.ca:80",
-    username: "54802f233bc4f94626bf76e1",
-    credential: "ipCZUvoLoYzVeHVz",
-  },
-  {
-    urls: "turn:global.relay.metered.ca:80?transport=tcp",
-    username: "54802f233bc4f94626bf76e1",
+    username: "0b3cef3685935b3424354cbea99c073db622",
     credential: "ipCZUvoLoYzVeHVz",
   },
   {
     urls: "turn:global.relay.metered.ca:443",
-    username: "54802f233bc4f94626bf76e1",
+    username: "0b3cef3685935b3424354cbea99c073db622",
     credential: "ipCZUvoLoYzVeHVz",
   },
   {
-    urls: "turns:global.relay.metered.ca:443?transport=tcp",
-    username: "54802f233bc4f94626bf76e1",
-    credential: "ipCZUvoLoYzVeHVz",
-  },
+    urls: "turn:relay.backups.cz:3478",
+    username: "webrtc",
+    credential: "webrtc"
+  }
 ];
 
 const VideoCall = ({ 
@@ -230,8 +234,9 @@ const VideoCall = ({
   // Function to fetch ICE servers from Metered API
   const fetchIceServers = async () => {
     try {
-      console.log('Fetching ICE servers from Metered API...');
-      const response = await fetch(`https://chatappv2.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`);
+      console.log('Fetching ICE servers from Metered API with key:', METERED_API_KEY.substring(0, 5) + '...');
+      // Updated endpoint with the correct subdomain
+      const response = await fetch(`https://shashikant.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch ICE servers: ${response.status} ${response.statusText}`);
@@ -239,6 +244,10 @@ const VideoCall = ({
       
       const data = await response.json();
       console.log('Received ICE servers:', data);
+      
+      // Add a message to check if we have valid TURN servers
+      const hasTurnServers = data.some(server => server.urls.indexOf('turn:') === 0);
+      console.log('Valid TURN servers found:', hasTurnServers);
       
       setIceServers(data);
       setAreIceServersReady(true);
@@ -670,27 +679,58 @@ const VideoCall = ({
                 event.track.onunmute = () => console.log('Remote track unmuted');
                 event.track.onended = () => console.log('Remote track ended');
                 
-                // For audio-only calls, also set the audio track to the dedicated audio element
+                // For audio-only calls, route audio to the dedicated audio element
                 if (event.track.kind === 'audio' && isAudioOnly && audioElementRef.current) {
-                  const audioStream = new MediaStream([event.track]);
-                  audioElementRef.current.srcObject = audioStream;
-                  audioElementRef.current.volume = 1.0;
-                  audioElementRef.current.play().catch(err => {
-                    console.error('Error playing audio:', err);
-                  });
+                  console.log('Setting up dedicated audio element for audio-only call');
                   
-                  console.log('Set audio track to dedicated audio element for audio-only call');
+                  try {
+                    // Create a new stream with just this audio track
+                    const audioStream = new MediaStream([event.track]);
+                    
+                    // Set the stream to the audio element
+                    audioElementRef.current.srcObject = audioStream;
+                    audioElementRef.current.volume = 1.0;
+                    audioElementRef.current.muted = false;
+                    
+                    // Force autoplay
+                    const playPromise = audioElementRef.current.play();
+                    
+                    if (playPromise !== undefined) {
+                      playPromise.catch(err => {
+                        console.error('Error playing audio:', err);
+                        // Try again with user interaction
+                        console.log('Will attempt to play audio again on next user interaction');
+                        
+                        // Setup retry mechanism that will try to play again
+                        setTimeout(() => {
+                          audioElementRef.current.play().catch(e => 
+                            console.warn('Still unable to autoplay audio:', e)
+                          );
+                        }, 1000);
+                      });
+                    }
+                    
+                    console.log('Audio element setup complete:', {
+                      srcObject: !!audioElementRef.current.srcObject,
+                      volume: audioElementRef.current.volume,
+                      muted: audioElementRef.current.muted,
+                      paused: audioElementRef.current.paused
+                    });
+                  } catch (err) {
+                    console.error('Error setting up audio element:', err);
+                  }
                 }
               }
               
               if (remoteVideoRef.current && event.streams && event.streams[0]) {
                 console.log(`Setting remote stream - has video tracks: ${event.streams[0].getVideoTracks().length > 0}, has audio tracks: ${event.streams[0].getAudioTracks().length > 0}`);
                 
-                // Set the stream to the video element
+                // Always set the stream to the video element, even for audio-only calls as backup
                 remoteVideoRef.current.srcObject = event.streams[0];
                 
                 // Add explicit volume settings
                 remoteVideoRef.current.volume = 1.0;
+                remoteVideoRef.current.muted = false;
                 
                 // Listen for the play event
                 remoteVideoRef.current.onplay = () => {
@@ -714,6 +754,12 @@ const VideoCall = ({
                     
                     audioTracks.forEach((track, index) => {
                       console.log(`Audio track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+                      
+                      // Ensure tracks are enabled
+                      if (!track.enabled) {
+                        console.log("Enabling previously disabled audio track");
+                        track.enabled = true;
+                      }
                     });
                   }
                 }, 2000);
@@ -753,11 +799,23 @@ const VideoCall = ({
   // Create and initialize the peer connection - only for outgoing calls now
   const createPeerConnection = async () => {
     try {
-      console.log('Creating peer connection with ICE servers:', iceServers);
+      console.log('Creating peer connection with ICE servers:');
+      // Log each ICE server for debugging
+      iceServers.forEach((server, i) => {
+        console.log(`ICE Server ${i + 1}:`, {
+          urls: server.urls,
+          hasCredentials: !!server.username && !!server.credential
+        });
+      });
       
-      // Create a new RTCPeerConnection
+      // Create a new RTCPeerConnection with improved configuration
       peerConnectionRef.current = new RTCPeerConnection({ 
-        iceServers: iceServers
+        iceServers: iceServers,
+        iceTransportPolicy: 'all',
+        iceCandidatePoolSize: 10,
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
+        sdpSemantics: 'unified-plan'
       });
       
       // Add local stream tracks to the connection
@@ -939,27 +997,58 @@ const VideoCall = ({
           event.track.onunmute = () => console.log('Remote track unmuted');
           event.track.onended = () => console.log('Remote track ended');
           
-          // For audio-only calls, also set the audio track to the dedicated audio element
+          // For audio-only calls, route audio to the dedicated audio element
           if (event.track.kind === 'audio' && isAudioOnly && audioElementRef.current) {
-            const audioStream = new MediaStream([event.track]);
-            audioElementRef.current.srcObject = audioStream;
-            audioElementRef.current.volume = 1.0;
-            audioElementRef.current.play().catch(err => {
-              console.error('Error playing audio:', err);
-            });
+            console.log('Setting up dedicated audio element for audio-only call');
             
-            console.log('Set audio track to dedicated audio element for audio-only call');
+            try {
+              // Create a new stream with just this audio track
+              const audioStream = new MediaStream([event.track]);
+              
+              // Set the stream to the audio element
+              audioElementRef.current.srcObject = audioStream;
+              audioElementRef.current.volume = 1.0;
+              audioElementRef.current.muted = false;
+              
+              // Force autoplay
+              const playPromise = audioElementRef.current.play();
+              
+              if (playPromise !== undefined) {
+                playPromise.catch(err => {
+                  console.error('Error playing audio:', err);
+                  // Try again with user interaction
+                  console.log('Will attempt to play audio again on next user interaction');
+                  
+                  // Setup retry mechanism that will try to play again
+                  setTimeout(() => {
+                    audioElementRef.current.play().catch(e => 
+                      console.warn('Still unable to autoplay audio:', e)
+                    );
+                  }, 1000);
+                });
+              }
+              
+              console.log('Audio element setup complete:', {
+                srcObject: !!audioElementRef.current.srcObject,
+                volume: audioElementRef.current.volume,
+                muted: audioElementRef.current.muted,
+                paused: audioElementRef.current.paused
+              });
+            } catch (err) {
+              console.error('Error setting up audio element:', err);
+            }
           }
         }
         
         if (remoteVideoRef.current && event.streams && event.streams[0]) {
           console.log(`Setting remote stream - has video tracks: ${event.streams[0].getVideoTracks().length > 0}, has audio tracks: ${event.streams[0].getAudioTracks().length > 0}`);
           
-          // Set the stream to the video element
+          // Always set the stream to the video element, even for audio-only calls as backup
           remoteVideoRef.current.srcObject = event.streams[0];
           
           // Add explicit volume settings
           remoteVideoRef.current.volume = 1.0;
+          remoteVideoRef.current.muted = false;
           
           // Listen for the play event
           remoteVideoRef.current.onplay = () => {
@@ -983,6 +1072,12 @@ const VideoCall = ({
               
               audioTracks.forEach((track, index) => {
                 console.log(`Audio track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+                
+                // Ensure tracks are enabled
+                if (!track.enabled) {
+                  console.log("Enabling previously disabled audio track");
+                  track.enabled = true;
+                }
               });
             }
           }, 2000);
@@ -1366,6 +1461,261 @@ const VideoCall = ({
     }
   };
 
+  // Add this new function near the checkAndFixAudioIssues function
+  const runAudioDiagnostics = () => {
+    console.log('=== RUNNING AUDIO DIAGNOSTICS ===');
+    
+    // 1. Check for audio element state
+    if (audioElementRef.current) {
+      console.log('Audio element state:', {
+        volume: audioElementRef.current.volume,
+        muted: audioElementRef.current.muted,
+        paused: audioElementRef.current.paused,
+        hasStream: !!audioElementRef.current.srcObject,
+        streamActive: audioElementRef.current.srcObject ? 
+          audioElementRef.current.srcObject.active : false,
+        audioTracks: audioElementRef.current.srcObject ?
+          audioElementRef.current.srcObject.getAudioTracks().length : 0
+      });
+      
+      // Check if tracks are enabled/active
+      if (audioElementRef.current.srcObject) {
+        const audioTracks = audioElementRef.current.srcObject.getAudioTracks();
+        audioTracks.forEach((track, i) => {
+          console.log(`Audio track ${i}:`, {
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState,
+            id: track.id
+          });
+          
+          // Force enable
+          if (!track.enabled) {
+            track.enabled = true;
+            console.log(`Forced track ${i} to enabled state`);
+          }
+        });
+      }
+      
+      // Force play
+      if (audioElementRef.current.paused) {
+        console.log('Audio element is paused, attempting to play...');
+        audioElementRef.current.play().catch(err => {
+          console.error('Failed to play audio element:', err);
+        });
+      }
+    } else {
+      console.warn('Audio element reference not available');
+    }
+    
+    // 2. Check remote video element (backup for audio)
+    if (remoteVideoRef.current) {
+      console.log('Remote video element state:', {
+        volume: remoteVideoRef.current.volume,
+        muted: remoteVideoRef.current.muted,
+        paused: remoteVideoRef.current.paused,
+        hasStream: !!remoteVideoRef.current.srcObject,
+        streamActive: remoteVideoRef.current.srcObject ? 
+          remoteVideoRef.current.srcObject.active : false,
+        audioTracks: remoteVideoRef.current.srcObject ?
+          remoteVideoRef.current.srcObject.getAudioTracks().length : 0
+      });
+      
+      // Check if tracks are enabled/active
+      if (remoteVideoRef.current.srcObject) {
+        const audioTracks = remoteVideoRef.current.srcObject.getAudioTracks();
+        audioTracks.forEach((track, i) => {
+          console.log(`Video element audio track ${i}:`, {
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState,
+            id: track.id
+          });
+          
+          // Force enable
+          if (!track.enabled) {
+            track.enabled = true;
+            console.log(`Forced video element track ${i} to enabled state`);
+          }
+        });
+      }
+      
+      // Force unmute
+      remoteVideoRef.current.muted = false;
+      remoteVideoRef.current.volume = 1.0;
+    } else {
+      console.warn('Remote video element reference not available');
+    }
+    
+    // 3. Check peer connection state
+    if (peerConnectionRef.current) {
+      console.log('Peer connection state:', {
+        connectionState: peerConnectionRef.current.connectionState,
+        iceConnectionState: peerConnectionRef.current.iceConnectionState,
+        iceGatheringState: peerConnectionRef.current.iceGatheringState,
+        signalingState: peerConnectionRef.current.signalingState
+      });
+      
+      // Check transceivers
+      const transceivers = peerConnectionRef.current.getTransceivers();
+      transceivers.forEach((transceiver, i) => {
+        console.log(`Transceiver ${i}:`, {
+          currentDirection: transceiver.currentDirection,
+          direction: transceiver.direction,
+          stopped: transceiver.stopped,
+          kind: transceiver.receiver.track ? transceiver.receiver.track.kind : 'unknown'
+        });
+      });
+    } else {
+      console.warn('Peer connection reference not available');
+    }
+    
+    // 4. Try alternative playback approach with AudioContext
+    try {
+      console.log('Attempting direct AudioContext playback...');
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContext();
+      
+      // Try with audio element's stream
+      if (audioElementRef.current && audioElementRef.current.srcObject) {
+        const source = audioCtx.createMediaStreamSource(audioElementRef.current.srcObject);
+        source.connect(audioCtx.destination);
+        console.log('Connected audio element stream to audio context destination');
+      } 
+      // Try with remote video's stream
+      else if (remoteVideoRef.current && remoteVideoRef.current.srcObject) {
+        const source = audioCtx.createMediaStreamSource(remoteVideoRef.current.srcObject);
+        source.connect(audioCtx.destination);
+        console.log('Connected remote video stream to audio context destination');
+      } else {
+        console.warn('No streams available for direct audio context playback');
+      }
+    } catch (err) {
+      console.error('Error with AudioContext approach:', err);
+    }
+    
+    console.log('=== AUDIO DIAGNOSTICS COMPLETE ===');
+    
+    // Return a summary message to show to the user
+    return 'Audio diagnostics complete. Check browser console for details.';
+  };
+
+  // Add a new function to ensure audio stream is properly connected
+  const forcePeerConnectionAudio = () => {
+    if (!peerConnectionRef.current || !remoteVideoRef.current || !remoteVideoRef.current.srcObject) {
+      console.log('Cannot force audio - peer connection or remote stream not ready');
+      return;
+    }
+
+    try {
+      console.log('Attempting to force audio playback via manual connection...');
+      
+      // Create a new audio context
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContext();
+      
+      // Get remote stream from video element
+      const remoteStream = remoteVideoRef.current.srcObject;
+      
+      if (!remoteStream.getAudioTracks().length) {
+        console.warn('No audio tracks found in remote stream');
+        return;
+      }
+      
+      // Create audio source from the remote stream
+      const source = audioCtx.createMediaStreamSource(remoteStream);
+      
+      // Create a gain node to control volume
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.value = 1.0; // Full volume
+      
+      // Connect the source to the gain node and the gain node to the destination
+      source.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      console.log('Manual audio connection established');
+      
+      // Store the audio context in a ref for cleanup
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+      audioContextRef.current = audioCtx;
+      
+      return audioCtx;
+    } catch (err) {
+      console.error('Error forcing audio playback:', err);
+    }
+  };
+
+  // Add a new useEffect to handle connection recovery
+  useEffect(() => {
+    // Only run this effect when a call is active
+    if (!isCallActive || !peerConnectionRef.current) return;
+    
+    // Helper to check if we need to renegotiate based on connection state
+    const checkConnectionHealth = () => {
+      if (!peerConnectionRef.current) return;
+      
+      const iceState = peerConnectionRef.current.iceConnectionState;
+      console.log(`Checking connection health: ICE state is ${iceState}`);
+      
+      if (iceState === 'disconnected' || iceState === 'failed') {
+        console.log('Connection in bad state, triggering recovery');
+        attemptConnectionRecovery();
+      }
+    };
+    
+    // Function to try to recover the connection
+    const attemptConnectionRecovery = async () => {
+      console.log('Attempting connection recovery...');
+      
+      try {
+        // 1. First try simple ICE restart
+        if (peerConnectionRef.current.restartIce) {
+          console.log('Restarting ICE');
+          peerConnectionRef.current.restartIce();
+        }
+        
+        // 2. If we're the caller, create and send a new offer with ICE restart flag
+        if (!isIncoming && peerConnectionRef.current.signalingState === 'stable') {
+          console.log('Creating recovery offer with ICE restart');
+          const offer = await peerConnectionRef.current.createOffer({
+            iceRestart: true,
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: callType === 'video'
+          });
+          
+          await peerConnectionRef.current.setLocalDescription(offer);
+          
+          // Send the recovery offer
+          try {
+            socket.emit('call-offer', {
+              offer: offer,
+              callerId: localUser.uid,
+              calleeId: isIncoming ? caller.uid : callee.uid,
+              callType: callType,
+              isRecoveryOffer: true
+            });
+            
+            console.log('Sent recovery offer');
+          } catch (socketError) {
+            console.error('Failed to send recovery offer:', socketError);
+          }
+        }
+      } catch (err) {
+        console.error('Recovery attempt failed:', err);
+      }
+    };
+    
+    // Set up a periodic connection health check
+    const healthCheckInterval = setInterval(checkConnectionHealth, 5000);
+    
+    // Clean up
+    return () => {
+      clearInterval(healthCheckInterval);
+    };
+  }, [isCallActive, peerConnectionRef.current, isIncoming, callType, socket, localUser, caller, callee]);
+
   return (
     <div className={`video-call-container ${isOpen ? 'active' : ''}`}>
       <div className="video-call-content">
@@ -1440,39 +1790,38 @@ const VideoCall = ({
                   <button 
                     className="debug-audio-button"
                     onClick={() => {
-                      checkAndFixAudioIssues();
+                      const diagMessage = runAudioDiagnostics();
                       
-                      // Additional debugging for audio element
-                      if (audioElementRef.current) {
-                        console.log('Audio element state:', {
-                          volume: audioElementRef.current.volume,
-                          muted: audioElementRef.current.muted,
-                          paused: audioElementRef.current.paused,
-                          hasStream: !!audioElementRef.current.srcObject,
-                          streamActive: audioElementRef.current.srcObject ? 
-                            audioElementRef.current.srcObject.active : false,
-                          audioTracks: audioElementRef.current.srcObject ?
-                            audioElementRef.current.srcObject.getAudioTracks().length : 0
-                        });
-                        
-                        // Try to restart playback
-                        audioElementRef.current.play().catch(err => {
-                          console.error('Error trying to restart audio playback:', err);
-                        });
-                      }
+                      // Try alternative playback method
+                      const audioCtx = forcePeerConnectionAudio();
+                      
+                      // Show diagnostic results to user
+                      setError(diagMessage + (audioCtx ? ' Forced audio connection active.' : ''));
+                      
+                      // Clear the error message after 3 seconds
+                      setTimeout(() => {
+                        setError(null);
+                      }, 3000);
+                      
+                      // Also try the regular audio fix
+                      checkAndFixAudioIssues();
                     }}
                     style={{
                       marginTop: '10px',
-                      padding: '4px 8px',
+                      padding: '8px 12px',
                       borderRadius: '4px', 
-                      background: '#444',
+                      background: '#555',
                       color: 'white',
-                      border: 'none',
+                      border: '1px solid #888',
                       cursor: 'pointer',
-                      fontSize: '12px'
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      display: 'block',
+                      margin: '10px auto'
                     }}
                   >
-                    Debug Audio
+                    Fix Audio Issues
                   </button>
                 </div>
               )}
