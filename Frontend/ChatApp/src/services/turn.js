@@ -1,86 +1,41 @@
 /**
  * TURN Server Service
  * 
- * This service provides free TURN server credentials for WebRTC connections.
- * It rotates through multiple free TURN servers to avoid rate limits.
+ * This service provides Metered.ca free TURN server credentials for WebRTC connections.
  */
 
-// A collection of free TURN servers with credentials
-const FREE_TURN_SERVERS = [
-  // OpenRelay - free public TURN servers
-  {
-    urls: [
-      'turn:openrelay.metered.ca:80',
-      'turn:openrelay.metered.ca:443',  
-      'turn:openrelay.metered.ca:443?transport=tcp',
-      'turn:openrelay.metered.ca:80?transport=tcp',
-    ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
-  },
-  // AnyFirewall - free public TURN server
-  {
-    urls: [
-      'turn:turn.anyfirewall.com:443?transport=tcp'
-    ],
-    username: 'webrtc',
-    credential: 'webrtc'
-  },
-  // WebRTC.ROCKS - free public TURN server
-  {
-    urls: [
-      'turn:turn.webrtc.rocks:3478',
-      'turn:turn.webrtc.rocks:443?transport=tcp'
-    ],
-    username: 'sample',
-    credential: 'sample'
-  },
-  // Additional backup servers (fill these in if you have more)
-  {
-    urls: [
-      'turn:freeturn.net:3478',
-      'turn:freeturn.net:443?transport=tcp'
-    ],
-    username: 'free',
-    credential: 'free'
-  }
-];
+// Metered.ca free TURN servers with credentials
+const METERED_TURN_SERVERS = {
+  urls: [
+    'turn:openrelay.metered.ca:80',
+    'turn:openrelay.metered.ca:443',
+    'turn:openrelay.metered.ca:443?transport=tcp',
+    'turn:openrelay.metered.ca:80?transport=tcp',
+  ],
+  username: 'openrelayproject',
+  credential: 'openrelayproject'
+};
 
-// A collection of reliable free STUN servers
-const FREE_STUN_SERVERS = [
+// Free Google STUN servers as backup
+const STUN_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun3.l.google.com:19302' },
-  { urls: 'stun:stun4.l.google.com:19302' },
-  { urls: 'stun:stun.stunprotocol.org:3478' }
+  { urls: 'stun:stun2.l.google.com:19302' }
 ];
 
 /**
- * Get TURN server configuration with a rotation mechanism
- * to avoid hitting rate limits on any single provider
+ * Get standard WebRTC configuration with Metered.ca TURN servers
  */
 export const getTurnServerConfig = () => {
-  // Choose a TURN server based on time to distribute load
-  // Rotate every hour to avoid hitting rate limits
-  const rotationIndex = Math.floor(Date.now() / (1000 * 60 * 60)) % FREE_TURN_SERVERS.length;
-  const selectedTurnServer = FREE_TURN_SERVERS[rotationIndex];
-  
-  // Create the final ICE server configuration
-  const iceServers = [
-    selectedTurnServer,
-    // Add a different TURN server as backup
-    FREE_TURN_SERVERS[(rotationIndex + 1) % FREE_TURN_SERVERS.length],
-    // Add all STUN servers
-    ...FREE_STUN_SERVERS
-  ];
-
-  console.log('Using TURN server:', selectedTurnServer.urls[0]);
+  console.log('Using Metered.ca TURN servers');
   
   return {
-    iceServers,
+    iceServers: [
+      METERED_TURN_SERVERS,
+      ...STUN_SERVERS
+    ],
     iceCandidatePoolSize: 10,
-    iceTransportPolicy: 'all', // Start with 'all' for wider compatibility
+    iceTransportPolicy: 'all',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
     sdpSemantics: 'unified-plan'
@@ -88,41 +43,11 @@ export const getTurnServerConfig = () => {
 };
 
 /**
- * Get TURN server configuration in relay-only mode (more reliable but uses more bandwidth)
+ * Get forced relay config (forces the use of TURN servers)
  */
-export const getRelayOnlyTurnConfig = () => {
+export const getRelayOnlyConfig = () => {
   const config = getTurnServerConfig();
-  
-  // Force the use of TURN servers
   config.iceTransportPolicy = 'relay';
-  
-  return config;
-};
-
-/**
- * Get TCP-only TURN configuration for restrictive networks (corporate firewalls, etc.)
- */
-export const getTcpOnlyTurnConfig = () => {
-  const config = getTurnServerConfig();
-  
-  // Force the use of TURN servers with TCP transport
-  config.iceTransportPolicy = 'relay';
-  
-  // Filter out non-TCP URLs
-  config.iceServers = config.iceServers.map(server => {
-    if (typeof server.urls === 'string') {
-      // Skip non-TCP STUN servers
-      return server;
-    }
-    
-    return {
-      ...server,
-      urls: server.urls.filter(url => 
-        url.includes('transport=tcp') || url.includes('turns:')
-      )
-    };
-  });
-  
   return config;
 };
 
@@ -132,7 +57,7 @@ export const getTcpOnlyTurnConfig = () => {
  */
 export const testTurnServerConnectivity = async () => {
   return new Promise((resolve) => {
-    console.log('Testing TURN server connectivity...');
+    console.log('Testing Metered.ca TURN server connectivity...');
     
     // Get a standard configuration
     const config = getTurnServerConfig();
@@ -142,17 +67,15 @@ export const testTurnServerConnectivity = async () => {
     let foundStun = false;
     let foundTurn = false;
     
-    // Set a timeout for the test (10 seconds)
+    // Set a timeout for the test (8 seconds)
     const timeout = setTimeout(() => {
-      if (!pc.iceGatheringState === 'complete') {
-        console.warn('ICE gathering timed out');
-        pc.close();
-        resolve({ 
-          success: foundStun, 
-          relayWorks: foundTurn 
-        });
-      }
-    }, 10000);
+      console.warn('ICE gathering timed out');
+      pc.close();
+      resolve({ 
+        success: foundStun, 
+        relayWorks: foundTurn 
+      });
+    }, 8000);
     
     // Create a data channel to trigger ICE gathering
     pc.createDataChannel('turnTestChannel');

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import styles from './VoiceCall.module.css';
 import { FiPhoneCall as PhoneCallIcon, FiPhoneOff as PhoneOffIcon, FiMic as MicIcon, FiMicOff as MicOffIcon, FiRefreshCw as RefreshIcon } from 'react-icons/fi';
-import { getTurnServerConfig, getRelayOnlyTurnConfig, getTcpOnlyTurnConfig, testTurnServerConnectivity } from '../../services/turn';
+import { getTurnServerConfig, getRelayOnlyConfig, testTurnServerConnectivity } from '../../services/turn';
 
 const VoiceCall = ({ 
     isOpen, 
@@ -18,8 +18,7 @@ const VoiceCall = ({
     const [isMuted, setIsMuted] = useState(false);
     const [error, setError] = useState('');
     const [storedOffer, setStoredOffer] = useState(initialOffer);
-    const [fallbackLevel, setFallbackLevel] = useState(0);
-    const [showRetryButton, setShowRetryButton] = useState(false);
+    const [isRetrying, setIsRetrying] = useState(false);
     
     // Refs
     const peerConnectionRef = useRef(null);
@@ -32,8 +31,7 @@ const VoiceCall = ({
     const connectionTimeoutRef = useRef(null);
     
     // Constants
-    const CONNECTION_TIMEOUT = 15000; // 15 seconds 
-    const MAX_FALLBACK_LEVEL = 3;
+    const CONNECTION_TIMEOUT = 12000; // 12 seconds
     
     // Initialize storedOffer when initialOffer changes
     useEffect(() => {
@@ -97,9 +95,9 @@ const VoiceCall = ({
     }, [socket, remoteUser, localUser]);
     
     // Main call initialization logic
-    const initializeCall = async (isOutgoing) => {
+    const initializeCall = async (isOutgoing, forceRelay = false) => {
         try {
-            console.log(`Initializing ${isOutgoing ? 'outgoing' : 'incoming'} call with fallback level ${fallbackLevel}`);
+            console.log(`Initializing ${isOutgoing ? 'outgoing' : 'incoming'} call`);
             
             // Clean up any existing connection first
             cleanupPeerConnection();
@@ -107,8 +105,8 @@ const VoiceCall = ({
             // Reset ICE candidates queue
             iceCandidatesQueue.current = [];
             
-            // Get appropriate config based on fallback level
-            const config = getFallbackConfig(fallbackLevel);
+            // Get Metered.ca TURN config
+            const config = forceRelay ? getRelayOnlyConfig() : getTurnServerConfig();
             console.log('Using WebRTC configuration:', config);
             
             // Request audio permissions
@@ -163,48 +161,10 @@ const VoiceCall = ({
             return peerConnection;
         } catch (error) {
             console.error('Error initializing call:', error);
-            
-            // Try with next fallback level if not at max
-            if (fallbackLevel < MAX_FALLBACK_LEVEL && isConnectionError(error)) {
-                console.log(`Trying next fallback level: ${fallbackLevel + 1}`);
-                setFallbackLevel(prev => prev + 1);
-                return initializeCall(isOutgoing);
-            }
-            
             setError(`Failed to initialize call: ${error.message || 'Unknown error'}`);
             setCallStatus('ended');
-            setShowRetryButton(true);
+            setIsRetrying(false);
             throw error;
-        }
-    };
-    
-    // Check if an error is connection-related
-    const isConnectionError = (error) => {
-        if (!error) return false;
-        
-        const errorMsg = error.message?.toLowerCase() || '';
-        return (
-            errorMsg.includes('ice') ||
-            errorMsg.includes('network') ||
-            errorMsg.includes('connection') ||
-            errorMsg.includes('timeout') ||
-            error.name === 'TimeoutError' ||
-            error.name === 'OperationError'
-        );
-    };
-    
-    // Get configuration based on fallback level
-    const getFallbackConfig = (level) => {
-        switch (level) {
-            case 0: return getTurnServerConfig(); // Standard config
-            case 1: return getRelayOnlyTurnConfig(); // Force relay
-            case 2: return getTcpOnlyTurnConfig(); // TCP-only
-            case 3: // Final attempt with all options
-                const config = getTcpOnlyTurnConfig();
-                config.iceCandidatePoolSize = 20; // Larger pool
-                return config;
-            default:
-                return getTurnServerConfig();
         }
     };
     
@@ -231,7 +191,9 @@ const VoiceCall = ({
                 return;
             }
             
-            console.log('Generated ICE candidate', event.candidate);
+            // Log candidate type for debugging
+            const candidateType = event.candidate.candidate.split(' ')[7]; // host, srflx, or relay
+            console.log(`Generated ICE candidate (${candidateType}):`, event.candidate);
             
             if (socket && remoteUser?.uid) {
                 try {
@@ -274,23 +236,22 @@ const VoiceCall = ({
                     
                 case 'failed':
                     console.error('Connection failed');
-                    setError('Connection failed. Please try again.');
                     
-                    // Try next fallback if possible
-                    if (fallbackLevel < MAX_FALLBACK_LEVEL) {
-                        console.log(`Trying next fallback level: ${fallbackLevel + 1}`);
-                        setFallbackLevel(prev => prev + 1);
+                    // Only retry once with forced TURN relay
+                    if (!isRetrying) {
+                        console.log('Retrying with forced TURN relay');
+                        setIsRetrying(true);
                         
-                        // Re-initialize with new fallback
+                        // Re-initialize with forced relay
                         cleanupPeerConnection();
                         if (callType === 'outgoing') {
-                            initializeCall(true);
+                            initializeCall(true, true);
                         } else {
-                            handleIncomingCall(fallbackLevel + 1);
+                            handleIncomingCall(true);
                         }
                     } else {
+                        setError('Connection failed. Please try again.');
                         setCallStatus('ended');
-                        setShowRetryButton(true);
                     }
                     break;
                     
@@ -314,12 +275,20 @@ const VoiceCall = ({
                         console.log('Connection attempt timed out');
                         setError('Connection attempt timed out. Try again or check your network.');
                         
-                        // Try next fallback if available
-                        if (fallbackLevel < MAX_FALLBACK_LEVEL) {
-                            setFallbackLevel(prev => prev + 1);
+                        // Retry with forced relay if not already retrying
+                        if (!isRetrying) {
+                            console.log('Retrying with forced TURN relay');
+                            setIsRetrying(true);
+                            
+                            // Re-initialize with forced relay
+                            cleanupPeerConnection();
+                            if (callType === 'outgoing') {
+                                initializeCall(true, true);
+                            } else {
+                                handleIncomingCall(true);
+                            }
                         } else {
                             setCallStatus('ended');
-                            setShowRetryButton(true);
                         }
                     }
                 }, CONNECTION_TIMEOUT);
@@ -329,7 +298,6 @@ const VoiceCall = ({
                 
                 // Log connection information
                 peerConnection.getStats(null).then(stats => {
-                    let usingRelay = false;
                     let selectedCandidate = null;
                     
                     stats.forEach(report => {
@@ -383,29 +351,23 @@ const VoiceCall = ({
             const testResult = await testTurnServerConnectivity();
             console.log('TURN connectivity test result:', testResult);
             
-            if (!testResult.success) {
-                console.warn('TURN/STUN connectivity issues detected, starting with fallback level 1');
-                setFallbackLevel(1);
-            }
+            // Start with forced relay if TURN test fails
+            const shouldForceRelay = !testResult.success || !testResult.relayWorks;
             
             // Initialize and start the call
-            await initializeCall(true);
+            await initializeCall(true, shouldForceRelay);
         } catch (error) {
             console.error('Error starting call:', error);
             setError(`Call failed: ${error.message || 'Connection error'}`);
             setCallStatus('ended');
-            setShowRetryButton(true);
         }
     };
     
     // Handle an incoming call
-    const handleIncomingCall = async (fallbackLevelOverride) => {
+    const handleIncomingCall = async (forceRelay = false) => {
         try {
             console.log('Handling incoming call', storedOffer);
             setCallStatus('connecting');
-            
-            const activeFallbackLevel = fallbackLevelOverride !== undefined ? 
-                fallbackLevelOverride : fallbackLevel;
             
             if (!storedOffer) {
                 throw new Error('No offer available for incoming call');
@@ -417,7 +379,7 @@ const VoiceCall = ({
                 storedOffer.from = remoteUser.uid;
             }
             
-            const peerConnection = await initializeCall(false);
+            const peerConnection = await initializeCall(false, forceRelay);
             
             if (!peerConnection) {
                 throw new Error('Failed to create peer connection');
@@ -449,17 +411,8 @@ const VoiceCall = ({
             console.log('Answer sent, waiting for connection');
         } catch (error) {
             console.error('Error handling incoming call:', error);
-            
-            // Try next fallback if possible and error is connection-related
-            if (fallbackLevel < MAX_FALLBACK_LEVEL && isConnectionError(error)) {
-                console.log(`Trying next fallback level for incoming call: ${fallbackLevel + 1}`);
-                setFallbackLevel(prev => prev + 1);
-                return handleIncomingCall(fallbackLevel + 1);
-            }
-            
             setError(`Failed to answer call: ${error.message || 'Connection error'}`);
             setCallStatus('ended');
-            setShowRetryButton(true);
         }
     };
     
@@ -610,7 +563,9 @@ const VoiceCall = ({
                 return;
             }
             
-            console.log('Processing ICE candidate');
+            // Log candidate type for debugging
+            const candidateType = candidate.candidate.split(' ')[7]; // host, srflx, or relay
+            console.log(`Received ICE candidate (${candidateType})`);
             
             // Queue candidate if remote description not set yet
             if (peerConnectionRef.current.remoteDescription === null) {
@@ -764,14 +719,14 @@ const VoiceCall = ({
         setCallStatus('ended');
         remoteStreamRef.current = null;
         setStoredOffer(null);
+        setIsRetrying(false);
     };
     
-    // Retry call with different settings
+    // Retry call
     const retryCall = () => {
-        console.log('Retrying call with new settings');
+        console.log('Retrying call with forced TURN relay');
         setError('');
-        setShowRetryButton(false);
-        setFallbackLevel(prev => Math.min(prev + 1, MAX_FALLBACK_LEVEL));
+        setIsRetrying(true);
         
         // Re-initialize call
         if (callType === 'outgoing') {
@@ -988,7 +943,7 @@ const VoiceCall = ({
                     )}
                     
                     {/* Ended state */}
-                    {callStatus === 'ended' && showRetryButton && (
+                    {callStatus === 'ended' && (
                         <>
                             <div className={styles.callDetails}>
                                 <span>Call ended</span>
