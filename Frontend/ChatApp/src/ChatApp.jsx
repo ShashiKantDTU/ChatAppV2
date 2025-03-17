@@ -917,29 +917,6 @@ function ChatApp() {
               <span className={styles.buttonLabel}>Logout</span>
             </button>
           </div>
-
-          {showLogoutConfirm && (
-            <div className={styles.confirmOverlay}>
-              <div className={styles.confirmDialog}>
-                <h3>Confirm Logout</h3>
-                <p>Are you sure you want to logout?</p>
-                <div className={styles.confirmButtons}>
-                  <button 
-                    className={styles.cancelButton}
-                    onClick={() => setShowLogoutConfirm(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    className={styles.confirmButton}
-                    onClick={handleLogout}
-                  >
-                    Logout
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </nav>
 
         <main className={styles.mainContent}>
@@ -1123,6 +1100,30 @@ function ChatApp() {
             </div>
           )}
         </main>
+        
+        {/* Moved logout confirmation dialog outside of nav to be centered on whole screen */}
+        {showLogoutConfirm && (
+          <div className={styles.confirmOverlay}>
+            <div className={styles.confirmDialog}>
+              <h3>Confirm Logout</h3>
+              <p>Are you sure you want to logout?</p>
+              <div className={styles.confirmButtons}>
+                <button 
+                  className={styles.cancelButton}
+                  onClick={() => setShowLogoutConfirm(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className={styles.confirmButton}
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
 }
