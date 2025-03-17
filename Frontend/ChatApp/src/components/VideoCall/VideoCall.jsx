@@ -51,18 +51,6 @@ const VideoCall = ({
   localUser,
   callType = 'video' // 'video' or 'audio'
 }) => {
-  // Check for required props to avoid null reference errors
-  if (!socket || (isIncoming && !caller) || (!isIncoming && !callee) || !localUser) {
-    console.log('VideoCall: Missing required props', { 
-      hasSocket: !!socket, 
-      isIncoming: isIncoming, 
-      hasCaller: !!caller, 
-      hasCallee: !!callee,
-      hasLocalUser: !!localUser
-    });
-    return null; // Don't render anything if essential props are missing
-  }
-
   // Call states
   const [isCallActive, setIsCallActive] = useState(false);
   const [isLoading, setIsLoading] = useState(true);

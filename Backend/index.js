@@ -915,7 +915,7 @@ io.on('connection', (socket) => {
             
             // Find receiver by uid
             const receiver = await User.findOne({ uid: calleeId });
-            if (!receiver || !receiver.socketid) {
+            if (!receiver) {
                 // Send back a "user unavailable" message to caller
                 socket.emit('call-rejected', { 
                     message: 'User unavailable', 
@@ -925,14 +925,34 @@ io.on('connection', (socket) => {
                 return;
             }
             
-            // Send incoming call notification to the receiver
-            io.to(receiver.socketid).emit('incoming-call', {
-                callerId,
-                callerName,
-                callerProfilePic,
-                calleeId,
-                callType
+            // Find all socket sessions for the receiver
+            const activeSessions = await User.find({
+                uid: calleeId,
+                socketid: { $ne: null, $ne: '' }
             });
+            
+            if (activeSessions.length === 0) {
+                // No active sessions, user is offline
+                socket.emit('call-rejected', { 
+                    message: 'User unavailable', 
+                    callerId, 
+                    calleeId 
+                });
+                return;
+            }
+            
+            // Send incoming call notification to all receiver's active sessions
+            for (const session of activeSessions) {
+                if (session.socketid) {
+                    io.to(session.socketid).emit('incoming-call', {
+                        callerId,
+                        callerName,
+                        callerProfilePic,
+                        calleeId,
+                        callType
+                    });
+                }
+            }
         } catch (error) {
             console.error('Error in call-user handler:', error);
         }
@@ -944,17 +964,21 @@ io.on('connection', (socket) => {
             
             const { callerId, calleeId } = data;
             
-            // Find caller by uid
-            const caller = await User.findOne({ uid: callerId });
-            if (!caller || !caller.socketid) {
-                return;
-            }
-            
-            // Notify caller that call was accepted
-            io.to(caller.socketid).emit('call-accepted', {
-                callerId,
-                calleeId
+            // Find all caller's active sessions
+            const callerSessions = await User.find({
+                uid: callerId,
+                socketid: { $ne: null, $ne: '' }
             });
+            
+            // Notify all caller's active sessions that call was accepted
+            for (const session of callerSessions) {
+                if (session.socketid) {
+                    io.to(session.socketid).emit('call-accepted', {
+                        callerId,
+                        calleeId
+                    });
+                }
+            }
         } catch (error) {
             console.error('Error in call-accepted handler:', error);
         }
@@ -966,17 +990,21 @@ io.on('connection', (socket) => {
             
             const { callerId, calleeId } = data;
             
-            // Find caller by uid
-            const caller = await User.findOne({ uid: callerId });
-            if (!caller || !caller.socketid) {
-                return;
-            }
-            
-            // Notify caller that call was rejected
-            io.to(caller.socketid).emit('call-rejected', {
-                callerId,
-                calleeId
+            // Find all caller's active sessions
+            const callerSessions = await User.find({
+                uid: callerId,
+                socketid: { $ne: null, $ne: '' }
             });
+            
+            // Notify all caller's active sessions that call was rejected
+            for (const session of callerSessions) {
+                if (session.socketid) {
+                    io.to(session.socketid).emit('call-rejected', {
+                        callerId,
+                        calleeId
+                    });
+                }
+            }
         } catch (error) {
             console.error('Error in call-rejected handler:', error);
         }
@@ -988,19 +1016,23 @@ io.on('connection', (socket) => {
             
             const { offer, callerId, calleeId, callType } = data;
             
-            // Find callee by uid
-            const callee = await User.findOne({ uid: calleeId });
-            if (!callee || !callee.socketid) {
-                return;
-            }
-            
-            // Send offer to callee
-            io.to(callee.socketid).emit('call-offer', {
-                offer,
-                callerId,
-                calleeId,
-                callType
+            // Find all callee's active sessions
+            const calleeSessions = await User.find({
+                uid: calleeId,
+                socketid: { $ne: null, $ne: '' }
             });
+            
+            // Send offer to all callee's active sessions
+            for (const session of calleeSessions) {
+                if (session.socketid) {
+                    io.to(session.socketid).emit('call-offer', {
+                        offer,
+                        callerId,
+                        calleeId,
+                        callType
+                    });
+                }
+            }
         } catch (error) {
             console.error('Error in call-offer handler:', error);
         }
@@ -1012,18 +1044,22 @@ io.on('connection', (socket) => {
             
             const { answer, callerId, calleeId } = data;
             
-            // Find caller by uid
-            const caller = await User.findOne({ uid: callerId });
-            if (!caller || !caller.socketid) {
-                return;
-            }
-            
-            // Send answer to caller
-            io.to(caller.socketid).emit('call-answer', {
-                answer,
-                callerId,
-                calleeId
+            // Find all caller's active sessions
+            const callerSessions = await User.find({
+                uid: callerId,
+                socketid: { $ne: null, $ne: '' }
             });
+            
+            // Send answer to all caller's active sessions
+            for (const session of callerSessions) {
+                if (session.socketid) {
+                    io.to(session.socketid).emit('call-answer', {
+                        answer,
+                        callerId,
+                        calleeId
+                    });
+                }
+            }
         } catch (error) {
             console.error('Error in call-answer handler:', error);
         }
@@ -1049,18 +1085,22 @@ io.on('connection', (socket) => {
                 recipientId = callerId;
             }
             
-            // Find recipient
-            const recipient = await User.findOne({ uid: recipientId });
-            if (!recipient || !recipient.socketid) {
-                return;
-            }
-            
-            // Send ICE candidate to recipient
-            io.to(recipient.socketid).emit('ice-candidate', {
-                candidate,
-                callerId,
-                calleeId
+            // Find all recipient's active sessions
+            const recipientSessions = await User.find({
+                uid: recipientId,
+                socketid: { $ne: null, $ne: '' }
             });
+            
+            // Send ICE candidate to all recipient's active sessions
+            for (const session of recipientSessions) {
+                if (session.socketid) {
+                    io.to(session.socketid).emit('ice-candidate', {
+                        candidate,
+                        callerId,
+                        calleeId
+                    });
+                }
+            }
         } catch (error) {
             console.error('Error in ice-candidate handler:', error);
         }
@@ -1072,24 +1112,35 @@ io.on('connection', (socket) => {
             
             const { callerId, calleeId } = data;
             
-            // Find both users
-            const caller = await User.findOne({ uid: callerId });
-            const callee = await User.findOne({ uid: calleeId });
+            // Find all caller's and callee's active sessions
+            const callerSessions = await User.find({
+                uid: callerId,
+                socketid: { $ne: null, $ne: '' }
+            });
             
-            // Notify caller if not the one who ended the call
-            if (caller && caller.socketid && caller.socketid !== socket.id) {
-                io.to(caller.socketid).emit('call-ended', {
-                    callerId,
-                    calleeId
-                });
+            const calleeSessions = await User.find({
+                uid: calleeId,
+                socketid: { $ne: null, $ne: '' }
+            });
+            
+            // Notify all caller's active sessions except the one who ended the call
+            for (const session of callerSessions) {
+                if (session.socketid && session.socketid !== socket.id) {
+                    io.to(session.socketid).emit('call-ended', {
+                        callerId,
+                        calleeId
+                    });
+                }
             }
             
-            // Notify callee if not the one who ended the call
-            if (callee && callee.socketid && callee.socketid !== socket.id) {
-                io.to(callee.socketid).emit('call-ended', {
-                    callerId,
-                    calleeId
-                });
+            // Notify all callee's active sessions except the one who ended the call
+            for (const session of calleeSessions) {
+                if (session.socketid && session.socketid !== socket.id) {
+                    io.to(session.socketid).emit('call-ended', {
+                        callerId,
+                        calleeId
+                    });
+                }
             }
         } catch (error) {
             console.error('Error in call-ended handler:', error);

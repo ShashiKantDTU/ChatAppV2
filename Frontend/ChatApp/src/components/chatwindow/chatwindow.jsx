@@ -5,6 +5,7 @@ import Message from './message';
 import scrollToBottom from '../../../scripts/scrolltobottom';
 import TypingIndicator from './typingindicator';
 import formatChatTime from '../../../scripts/converttime';
+import VideoCall from '../VideoCall/VideoCall';
 
 // Hook to force component re-render
 const useForceUpdate = () => {
@@ -55,6 +56,12 @@ const ChatWindow = (props) => {
     const [imageDisplayMode, setImageDisplayMode] = useState('auto'); // 'contain', 'cover', or 'auto'
     const [imageLoaded, setImageLoaded] = useState(false);
     const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
+    
+    // Video calling state variables
+    const [showCallUI, setShowCallUI] = useState(false);
+    const [isIncomingCall, setIsIncomingCall] = useState(false);
+    const [callInfo, setCallInfo] = useState(null);
+    const [callType, setCallType] = useState('video');
     
     // Call the hook to get forceUpdate function
     const forceUpdate = useForceUpdate();
@@ -970,6 +977,100 @@ const ChatWindow = (props) => {
         });
     };
 
+    // Listen for call-related socket events
+    useEffect(() => {
+        if (!props.socket) return;
+        
+        // Set up call event listeners - but only handle outgoing calls here
+        // Incoming calls will be handled by the parent ChatApp component
+        props.socket.on('call-accepted', (data) => {
+            console.log('Call accepted in chat window:', data);
+            // Only handle if this is related to a call we initiated
+            if (data.calleeId === props.userdata.uid && data.callerId === props.localUser.uid) {
+                // Continue with the call - the caller will send an offer next
+            }
+        });
+        
+        props.socket.on('call-rejected', (data) => {
+            // Only handle if this is related to a call we initiated
+            if (data.calleeId === props.userdata.uid && data.callerId === props.localUser.uid) {
+                setShowCallUI(false);
+                setCallInfo(null);
+                alert('Call was rejected');
+            }
+        });
+        
+        props.socket.on('call-ended', (data) => {
+            // Only handle if this is related to a call we're in
+            if ((data.calleeId === props.userdata.uid && data.callerId === props.localUser.uid) ||
+                (data.callerId === props.userdata.uid && data.calleeId === props.localUser.uid)) {
+                setShowCallUI(false);
+                setCallInfo(null);
+            }
+        });
+        
+        // Clean up on unmount
+        return () => {
+            props.socket.off('call-accepted');
+            props.socket.off('call-rejected');
+            props.socket.off('call-ended');
+        };
+    }, [props.socket, props.userdata, props.localUser]);
+    
+    // Use these handlers for outgoing calls initiated from ChatWindow
+    const handleStartCall = () => {
+        setIsIncomingCall(false);
+        setShowCallUI(true);
+        setCallInfo({
+            calleeId: props.userdata.uid,
+            calleeName: props.userdata.name,
+            calleeProfilePic: props.userdata.profilepicture
+        });
+        // Default to video call
+        setCallType('video');
+    };
+    
+    const handleVoiceCall = () => {
+        setIsIncomingCall(false);
+        setShowCallUI(true);
+        setCallInfo({
+            calleeId: props.userdata.uid,
+            calleeName: props.userdata.name,
+            calleeProfilePic: props.userdata.profilepicture
+        });
+        // Set call type to audio only
+        setCallType('audio');
+    };
+    
+    // Handle accepting a call
+    const handleAcceptCall = () => {
+        if (!props.socket || !callInfo) return;
+        
+        props.socket.emit('call-accepted', {
+            callerId: callInfo.callerId,
+            calleeId: props.localUser.uid
+        });
+    };
+    
+    // Handle rejecting a call
+    const handleRejectCall = () => {
+        if (!props.socket || !callInfo) return;
+        
+        props.socket.emit('call-rejected', {
+            callerId: callInfo.callerId,
+            calleeId: props.localUser.uid
+        });
+        
+        setShowCallUI(false);
+        setCallInfo(null);
+    };
+    
+    // Handle ending a call
+    const handleEndCall = () => {
+        setShowCallUI(false);
+        setCallInfo(null);
+    };
+
     return (
         <div className="chat-window">
             <div className='chatheader'>
@@ -992,10 +1093,10 @@ const ChatWindow = (props) => {
                     </div>
                 </div>
                 <div className='chatheaderright'>
-                    <button className='chatheaderbtn' onClick={props.onVoiceCall} title="Voice Call">
+                    <button className='chatheaderbtn' onClick={handleVoiceCall} title="Voice Call">
                         <Phone size={24} color='white' />
                     </button>
-                    <button className='chatheaderbtn' onClick={props.onStartCall} title="Video Call">
+                    <button className='chatheaderbtn' onClick={handleStartCall} title="Video Call">
                         <Video size={24} color='white' />
                     </button>
                 </div>
@@ -1408,6 +1509,25 @@ const ChatWindow = (props) => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Video Call UI */}
+            {showCallUI && !isIncomingCall && (
+                <VideoCall 
+                    isOpen={showCallUI}
+                    onClose={handleEndCall}
+                    isIncoming={false}
+                    callee={{
+                        uid: props.userdata.uid,
+                        name: props.userdata.name,
+                        profilepicture: props.userdata.profilepicture
+                    }}
+                    onAccept={handleAcceptCall}
+                    onReject={handleRejectCall}
+                    socket={props.socket}
+                    localUser={props.localUser}
+                    callType={callType}
+                />
             )}
         </div>
     );

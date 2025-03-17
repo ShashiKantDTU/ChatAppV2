@@ -9,21 +9,6 @@ import RecentChats from './components/recentchats';
 import { useNavigate } from 'react-router-dom';
 import VideoCall from './components/VideoCall/VideoCall';
 
-// Add a style for the video call overlay
-const videoCallOverlayStyle = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  zIndex: 1000, // Ensure it's above everything else
-  pointerEvents: 'none' // This allows clicks to pass through when call UI is not active
-};
-
-// Style to enable pointer events when call is active
-const activeVideoCallStyle = {
-  pointerEvents: 'auto'
-};
 
 // THERE ARE SOME ISSUES IN THE FRONTEND OF THE APP (LAYOUT PROBLEMS ) FIX THEM IN THIS CODE
 
@@ -46,14 +31,13 @@ function ChatApp() {
         const savedTheme = localStorage.getItem('theme');
         return savedTheme ? savedTheme === 'dark' : true;
     });
-    const navigate = useNavigate();
-    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-    
-    // Add global call handling state
-    const [showCallUI, setShowCallUI] = useState(false);
+    // Global call state variables
+    const [showGlobalCallUI, setShowGlobalCallUI] = useState(false);
     const [isIncomingCall, setIsIncomingCall] = useState(false);
     const [callInfo, setCallInfo] = useState(null);
     const [callType, setCallType] = useState('video');
+    const navigate = useNavigate();
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
     // Function to handle window resize
     const handleResize = useCallback(() => {
@@ -73,8 +57,8 @@ function ChatApp() {
 
     // Establish socket connection
     useEffect(() => {
-        // Only create socket if it doesn't exist AND user data is available
-        if (!socket && user?.email && user?.uid) {
+        // Only create socket if it doesn't exist
+        if (!socket) {
             console.log('Creating new socket connection');
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
             const newSocket = io(API_URL, {
@@ -167,7 +151,7 @@ function ChatApp() {
                 setSocket(null);
             }
         };
-    }, [user?.email, user?.uid]); // Depend on both email and uid to ensure user is fully loaded
+    }, [user?.email]); // Only depend on user email
     
     // Function to fetch user data from server
     const fetchUser = useCallback((uid) => {
@@ -493,37 +477,7 @@ function ChatApp() {
           if (data.receiverId === user.uid && data.senderid === talkingToUser.uid) {
             setIsTyping(false);
           }
-        },
-        
-        // Add global call event handlers
-        "incoming-call": (callData) => {
-            console.log('Incoming call from:', callData);
-            setIsIncomingCall(true);
-            setCallInfo({
-                callerId: callData?.callerId || '',
-                callerName: callData?.callerName || 'Unknown',
-                callerProfilePic: callData?.callerProfilePic || '',
-                callType: callData?.callType || 'video'
-            });
-            setCallType(callData?.callType || 'video');
-            setShowCallUI(true);
-        },
-        
-        "call-accepted": (data) => {
-            console.log('Call accepted:', data);
-            // Continue with the call - the caller will send an offer next
-        },
-        
-        "call-rejected": () => {
-            setShowCallUI(false);
-            setCallInfo(null);
-            alert('Call was rejected');
-        },
-        
-        "call-ended": () => {
-            setShowCallUI(false);
-            setCallInfo(null);
-        },
+        }
       };
       
       // Register all event listeners
@@ -934,19 +888,51 @@ function ChatApp() {
       });
     };
 
-    // Global call handlers
-    const handleStartCall = (calleeUser, audioOnly = false) => {
-        if (!calleeUser || !socket || !user) return;
+    // Handle global incoming calls
+    useEffect(() => {
+        if (!socket || !user) return;
+
+        // Set up call event listeners at the ChatApp level
+        socket.on('incoming-call', (callData) => {
+            console.log('Global incoming call from:', callData);
+            setIsIncomingCall(true);
+            setCallInfo({
+                callerId: callData.callerId,
+                callerName: callData.callerName,
+                callerProfilePic: callData.callerProfilePic,
+                callType: callData.callType
+            });
+            setCallType(callData.callType || 'video');
+            setShowGlobalCallUI(true);
+        });
         
-        setIsIncomingCall(false);
-        setCallInfo(null);
-        setTalkingToUser(calleeUser); // Make sure we're talking to the callee
-        setCallType(audioOnly ? 'audio' : 'video');
-        setShowCallUI(true);
-    };
-    
-    const handleAcceptCall = () => {
-        if (!socket || !callInfo || !user?.uid) return;
+        socket.on('call-accepted', (data) => {
+            console.log('Call accepted globally:', data);
+            // Continue with the call if this event is relevant to us
+        });
+        
+        socket.on('call-rejected', () => {
+            setShowGlobalCallUI(false);
+            setCallInfo(null);
+        });
+        
+        socket.on('call-ended', () => {
+            setShowGlobalCallUI(false);
+            setCallInfo(null);
+        });
+        
+        // Clean up on unmount
+        return () => {
+            socket.off('incoming-call');
+            socket.off('call-accepted');
+            socket.off('call-rejected');
+            socket.off('call-ended');
+        };
+    }, [socket, user]);
+
+    // Handle accepting a call globally
+    const handleGlobalAcceptCall = () => {
+        if (!socket || !callInfo) return;
         
         socket.emit('call-accepted', {
             callerId: callInfo.callerId,
@@ -954,127 +940,314 @@ function ChatApp() {
         });
     };
     
-    const handleRejectCall = () => {
-        if (!socket || !callInfo || !user?.uid) return;
+    // Handle rejecting a call globally
+    const handleGlobalRejectCall = () => {
+        if (!socket || !callInfo) return;
         
         socket.emit('call-rejected', {
             callerId: callInfo.callerId,
             calleeId: user.uid
         });
         
-        setShowCallUI(false);
+        setShowGlobalCallUI(false);
         setCallInfo(null);
     };
     
-    const handleEndCall = () => {
-        if (!socket) return;
-        
-        setShowCallUI(false);
+    // Handle ending a call globally
+    const handleGlobalEndCall = () => {
+        setShowGlobalCallUI(false);
         setCallInfo(null);
     };
 
-    return (
-        <div className={`${styles.container} ${isDarkMode ? styles.darkTheme : styles.lightTheme}`}>
-          {/* Desktop Navigation Panel - Hidden on Mobile */}
-          <nav className={`${styles.navigationPanel} ${ismobile ? styles.hiddenOnMobile : ''}`}>
-            {/* ... existing navigation panel content ... */}
-          </nav>
+    // Function to get caller user data
+    const getCallerUserData = useCallback(async (callerId) => {
+        if (!callerId) return null;
+        
+        try {
+            const userData = await fetchUser(callerId);
+            return userData;
+        } catch (error) {
+            console.error('Error fetching caller data:', error);
+            return {
+                uid: callerId,
+                name: 'Unknown User',
+                profilepicture: '/default-avatar.png'
+            };
+        }
+    }, [fetchUser]);
 
-          <main className={styles.mainContent}>
-            {/* ... existing main content sections ... */}
-            
-            <div 
-              className={styles.chatSection}
-              style={{
-                width: ismobile ? (activeSection === 'chatSection' ? '100%' : '0') : 'auto',
-                flex: !ismobile ? 1 : 'none',
-                height: ismobile ? '100%' : 'auto',
-                opacity: (ismobile && activeSection !== 'chatSection') ? '0' : '1',
-                visibility: (ismobile && activeSection !== 'chatSection') ? 'hidden' : 'visible',
-                position: ismobile ? 'absolute' : 'relative',
-                overflow: 'hidden'
-              }}
-            >
-              {talkingToUser ? (
-                <ChatWindow
-                  handlesend={handleSend}
-                  userdata={talkingToUser}
-                  isTyping={isTyping}
-                  handletyping={handleUserTyping}
-                  onReactionAdd={handleReactionAdd}
-                  onDeleteMessage={handleDeleteMessage}
-                  onBack={ismobile ? () => handleNavigation('recentChatsSection') : undefined}
-                  socket={socket}
-                  localUser={user}
-                  onStartCall={() => handleStartCall(talkingToUser, false)}
-                  onVoiceCall={() => handleStartCall(talkingToUser, true)}
-                />
-              ) : (
-                <EmptyPage onNewChat={() => handleNavigation('searchSection')} />
-              )}
-            </div>
-          </main>
+    return (
+      <div className={`${styles.container} ${isDarkMode ? styles.darkTheme : styles.lightTheme}`}>
+        {/* Desktop Navigation Panel - Hidden on Mobile */}
+        <nav className={`${styles.navigationPanel} ${ismobile ? styles.hiddenOnMobile : ''}`}>
+          <div className={styles.logoSection}>
+            <img src= {user?.profilepicture || "/default-avatar.png"} alt="ChatApp" className={styles.logo} />
+          </div>
           
-          {/* Moved logout confirmation dialog outside of nav to be centered on whole screen */}
-          {showLogoutConfirm && (
-            <div className={styles.confirmOverlay}>
-              <div className={styles.confirmDialog}>
-                <h3>Confirm Logout</h3>
-                <p>Are you sure you want to logout?</p>
-                <div className={styles.confirmButtons}>
-                  <button 
-                    className={styles.cancelButton}
-                    onClick={() => setShowLogoutConfirm(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    className={styles.confirmButton}
-                    onClick={handleLogout}
-                  >
-                    Logout
-                  </button>
+          <div className={styles.navButtons}>
+            <button 
+              className={`${styles.navButton} ${activeSection === 'recentChatsSection' ? styles.active : ''}`}
+              onClick={() => handleNavigation('recentChatsSection')}
+            >
+              <Home size={24} />
+              <span className={styles.buttonLabel}>Home</span>
+            </button>
+
+            <button 
+              className={`${styles.navButton} ${activeSection === 'searchSection' ? styles.active : ''}`}
+              onClick={() => handleNavigation('searchSection')}
+            >
+              <Search size={24} />
+              <span className={styles.buttonLabel}>Search</span>
+            </button>
+
+            <button 
+              className={`${styles.navButton} ${activeSection === 'settingsSection' ? styles.active : ''}`}
+              onClick={() => handleNavigation('settingsSection')}
+            >
+              <Settings size={24} />
+              <span className={styles.buttonLabel}>Settings</span>
+            </button>
+          </div>
+
+          <div className={styles.logoutButtonWrapper}>
+            <button 
+              className={styles.logoutButton}
+              onClick={() => setShowLogoutConfirm(true)}
+              title="Logout"
+            >
+              <LogOut size={24} />
+              <span className={styles.buttonLabel}>Logout</span>
+            </button>
+          </div>
+        </nav>
+
+        <main className={styles.mainContent}>
+          <div 
+            className={styles.searchSection}
+            style={{
+              width: activeSection === 'searchSection' ? (ismobile ? '100%' : '400px') : '0',
+              height: ismobile ? '100%' : 'auto',
+              opacity: activeSection === 'searchSection' ? '1' : '0',
+              visibility: activeSection === 'searchSection' ? 'visible' : 'hidden',
+              position: ismobile ? 'absolute' : 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            <div className={styles.searchContainer}>
+              <h2 className={styles.sectionTitle}>Find Friends</h2>
+              <form onSubmit={handleUserSelect} className={styles.searchForm}>
+                <div className={styles.searchInputWrapper}>
+                  <Search size={20} className={styles.searchIcon} />
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    placeholder="Search users..."
+                    className={styles.searchInput}
+                  />
                 </div>
+                <button type="submit" className={styles.searchButton}>
+                  Search
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div 
+            className={styles.settingsSection}
+            style={{
+              width: activeSection === 'settingsSection' ? (ismobile ? '100%' : '400px') : '0',
+              height: ismobile ? '100%' : 'auto',
+              opacity: activeSection === 'settingsSection' ? '1' : '0',
+              visibility: activeSection === 'settingsSection' ? 'visible' : 'hidden',
+              position: ismobile ? 'absolute' : 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            <div className={styles.settingsContainer}>
+              <h2 className={styles.settingsTitle}>Settings</h2>
+              
+              <div className={styles.settingsGroup}>
+                <button className={styles.settingsItem}>
+                  <div className={styles.settingsLabel}>
+                    <User size={20} className={styles.settingsIcon} />
+                    <span>Profile Settings</span>
+                  </div>
+                  <span className={styles.settingsValue}>Edit</span>
+                </button>
+                
+                <button className={styles.settingsItem}>
+                  <div className={styles.settingsLabel}>
+                    <Bell size={20} className={styles.settingsIcon} />
+                    <span>Notifications</span>
+                  </div>
+                  <span className={styles.settingsValue}>On</span>
+                </button>
+                
+                <button 
+                  className={`${styles.settingsItem} ${styles.themeToggle}`}
+                  onClick={toggleTheme}
+                >
+                  <div className={styles.settingsLabel}>
+                    {isDarkMode ? (
+                      <Moon size={20} className={styles.settingsIcon} />
+                    ) : (
+                      <Sun size={20} className={styles.settingsIcon} />
+                    )}
+                    <span>Dark Mode</span>
+                  </div>
+                  <span className={styles.settingsValue}>
+                    {isDarkMode ? 'On' : 'Off'}
+                  </span>
+                </button>
+              </div>
+
+              <div className={styles.settingsGroup}>
+                <button className={styles.settingsItem}>
+                  <div className={styles.settingsLabel}>
+                    <Shield size={20} className={styles.settingsIcon} />
+                    <span>Privacy & Security</span>
+                  </div>
+                  <span className={styles.settingsValue}>Manage</span>
+                </button>
               </div>
             </div>
-          )}
-          
-          {/* Add VideoCall overlay that's visible regardless of current section */}
-          {socket && user && (
-            <div 
-              style={{
-                ...videoCallOverlayStyle,
-                ...(showCallUI ? activeVideoCallStyle : {})
+          </div>
+
+          <div 
+            className={`${styles.recentChatsSection} ${ismobile ? styles.mobileRecentChats : ''}`}
+            style={{
+              width: activeSection === 'recentChatsSection' || (!ismobile && activeSection !== 'searchSection' && activeSection !== 'settingsSection') 
+                ? (ismobile ? '100%' : '400px') 
+                : '0',
+              height: ismobile ? '100%' : 'auto',
+              opacity: activeSection === 'recentChatsSection' ? '1' : '0',
+              visibility: activeSection === 'recentChatsSection' ? 'visible' : 'hidden',
+              position: ismobile ? 'absolute' : 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            <RecentChats
+              handlechatclick={(uid, chatId) => {
+                handleUserChatClick(uid, chatId, user);
+                if (ismobile) {
+                  setActiveSection('chatSection');
+                }
               }}
-            >
-              <VideoCall 
-                isOpen={showCallUI}
-                onClose={handleEndCall}
-                isIncoming={isIncomingCall}
-                caller={isIncomingCall && callInfo ? { 
-                  uid: callInfo?.callerId || '',
-                  name: callInfo?.callerName || 'Unknown',
-                  profilepicture: callInfo?.callerProfilePic || ''
-                } : null}
-                callee={!isIncomingCall && talkingToUser ? {
-                  uid: talkingToUser?.uid || '',
-                  name: talkingToUser?.name || 'Unknown',
-                  profilepicture: talkingToUser?.profilepicture || ''
-                } : null}
-                onAccept={handleAcceptCall}
-                onReject={handleRejectCall}
+              handlesearchbtn={() => handleNavigation('searchSection')}
+              user={{...user, chats: sortedChats}}
+              notifications={notificationcount}
+              refreshUser= {refreshUser}
+              handleDeleteChat={handleDeleteChat}
+            />
+          </div>
+
+          <div 
+            className={styles.chatSection}
+            style={{
+              width: ismobile ? (activeSection === 'chatSection' ? '100%' : '0') : 'auto',
+              flex: !ismobile ? 1 : 'none',
+              height: ismobile ? '100%' : 'auto',
+              opacity: (ismobile && activeSection !== 'chatSection') ? '0' : '1',
+              visibility: (ismobile && activeSection !== 'chatSection') ? 'hidden' : 'visible',
+              position: ismobile ? 'absolute' : 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            {talkingToUser ? (
+              <ChatWindow
+                handlesend={handleSend}
+                userdata={talkingToUser}
+                isTyping={isTyping}
+                handletyping={handleUserTyping}
+                onReactionAdd={handleReactionAdd}
+                onDeleteMessage={handleDeleteMessage}
+                onBack={ismobile ? () => handleNavigation('recentChatsSection') : undefined}
                 socket={socket}
-                localUser={user ? {
-                  uid: user.uid || '',
-                  name: user.name || user.username || 'Me',
-                  profilepicture: user.profilepicture || '',
-                  email: user.email || ''
-                } : null}
-                callType={callType || 'video'}
+                localUser={user}
               />
+            ) : (
+              <EmptyPage onNewChat={() => handleNavigation('searchSection')} />
+            )}
+          </div>
+          
+          {/* Mobile Navigation Bar - Show on all sections except chat section */}
+          {ismobile && activeSection !== 'chatSection' && (
+            <div className={styles.mobileNavBar}>
+              <button 
+                className={`${styles.mobileNavButton} ${activeSection === 'recentChatsSection' ? styles.active : ''}`}
+                onClick={() => handleNavigation('recentChatsSection')}
+              >
+                <Home size={24} />
+              </button>
+              <button 
+                className={`${styles.mobileNavButton} ${activeSection === 'searchSection' ? styles.active : ''}`}
+                onClick={() => handleNavigation('searchSection')}
+              >
+                <Search size={24} />
+              </button>
+              <button 
+                className={`${styles.mobileNavButton} ${activeSection === 'settingsSection' ? styles.active : ''}`}
+                onClick={() => handleNavigation('settingsSection')}
+              >
+                <Settings size={24} />
+              </button>
+              <button className={styles.mobileNavButton}>
+                <img 
+                  src={user?.profilepicture || "/default-avatar.png"} 
+                  alt="Profile" 
+                  className={styles.mobileProfilePic} 
+                />
+              </button>
             </div>
           )}
-        </div>
+
+          {/* Global VideoCall Component */}
+          {showGlobalCallUI && (
+              <VideoCall
+                  isOpen={showGlobalCallUI}
+                  onClose={handleGlobalEndCall}
+                  isIncoming={isIncomingCall}
+                  caller={isIncomingCall ? {
+                      uid: callInfo?.callerId,
+                      name: callInfo?.callerName,
+                      profilepicture: callInfo?.callerProfilePic || '/default-avatar.png'
+                  } : null}
+                  callee={!isIncomingCall ? talkingToUser : null}
+                  onAccept={handleGlobalAcceptCall}
+                  onReject={handleGlobalRejectCall}
+                  socket={socket}
+                  localUser={user}
+                  callType={callType}
+              />
+          )}
+        </main>
+        
+        {/* Moved logout confirmation dialog outside of nav to be centered on whole screen */}
+        {showLogoutConfirm && (
+          <div className={styles.confirmOverlay}>
+            <div className={styles.confirmDialog}>
+              <h3>Confirm Logout</h3>
+              <p>Are you sure you want to logout?</p>
+              <div className={styles.confirmButtons}>
+                <button 
+                  className={styles.cancelButton}
+                  onClick={() => setShowLogoutConfirm(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className={styles.confirmButton}
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     );
 }
 
