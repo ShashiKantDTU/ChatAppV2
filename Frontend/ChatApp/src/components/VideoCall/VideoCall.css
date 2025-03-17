@@ -1,0 +1,241 @@
+.video-call-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.video-call-container.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.video-call-content {
+  width: 100%;
+  max-width: 1000px;
+  height: 100%;
+  max-height: 700px;
+  display: flex;
+  flex-direction: column;
+  background-color: #1a1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.video-call-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background-color: #2a2a2a;
+  color: white;
+}
+
+.video-call-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.call-duration {
+  font-size: 14px;
+  color: #ddd;
+  margin-left: auto;
+  margin-right: 20px;
+}
+
+.close-button {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.video-streams {
+  flex: 1;
+  position: relative;
+  background-color: #000;
+  overflow: hidden;
+}
+
+.remote-video-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #111;
+}
+
+.local-video-container {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 160px;
+  height: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.remote-video, .local-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.call-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  background-color: #2a2a2a;
+  gap: 24px;
+}
+
+.call-control-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #444;
+  border: none;
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.call-control-button span {
+  position: absolute;
+  bottom: -20px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.call-control-button:hover {
+  background-color: #555;
+  transform: scale(1.05);
+}
+
+.call-control-button.disabled {
+  background-color: #ff5555;
+}
+
+.call-control-button.end-call {
+  background-color: #e74c3c;
+}
+
+.call-control-button.accept {
+  background-color: #2ecc71;
+}
+
+.call-control-button.reject {
+  background-color: #e74c3c;
+}
+
+.loading-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-left-color: #7983ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.error-message {
+  color: #ff6b6b;
+  text-align: center;
+  padding: 20px;
+}
+
+.call-info {
+  padding: 8px 16px;
+  background-color: #222;
+  text-align: center;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.user-info img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  margin-right: 8px;
+  object-fit: cover;
+}
+
+.user-info h4 {
+  margin: 0;
+  font-weight: normal;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .video-call-content {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+  
+  .local-video-container {
+    width: 100px;
+    height: 150px;
+  }
+  
+  .call-controls {
+    padding: 16px;
+    gap: 16px;
+  }
+  
+  .call-control-button {
+    width: 48px;
+    height: 48px;
+  }
+} 

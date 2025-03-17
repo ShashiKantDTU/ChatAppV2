@@ -857,6 +857,194 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Video call socket handlers
+    socket.on('call-user', async (data) => {
+        try {
+            console.log('Call request received:', data);
+            
+            const { callerId, callerName, calleeId, callerProfilePic } = data;
+            
+            // Find receiver by uid
+            const receiver = await User.findOne({ uid: calleeId });
+            if (!receiver || !receiver.socketid) {
+                // Send back a "user unavailable" message to caller
+                socket.emit('call-rejected', { 
+                    message: 'User unavailable', 
+                    callerId, 
+                    calleeId 
+                });
+                return;
+            }
+            
+            // Send incoming call notification to the receiver
+            io.to(receiver.socketid).emit('incoming-call', {
+                callerId,
+                callerName,
+                callerProfilePic,
+                calleeId
+            });
+        } catch (error) {
+            console.error('Error in call-user handler:', error);
+        }
+    });
+    
+    socket.on('call-accepted', async (data) => {
+        try {
+            console.log('Call accepted:', data);
+            
+            const { callerId, calleeId } = data;
+            
+            // Find caller by uid
+            const caller = await User.findOne({ uid: callerId });
+            if (!caller || !caller.socketid) {
+                return;
+            }
+            
+            // Notify caller that call was accepted
+            io.to(caller.socketid).emit('call-accepted', {
+                callerId,
+                calleeId
+            });
+        } catch (error) {
+            console.error('Error in call-accepted handler:', error);
+        }
+    });
+    
+    socket.on('call-rejected', async (data) => {
+        try {
+            console.log('Call rejected:', data);
+            
+            const { callerId, calleeId } = data;
+            
+            // Find caller by uid
+            const caller = await User.findOne({ uid: callerId });
+            if (!caller || !caller.socketid) {
+                return;
+            }
+            
+            // Notify caller that call was rejected
+            io.to(caller.socketid).emit('call-rejected', {
+                callerId,
+                calleeId
+            });
+        } catch (error) {
+            console.error('Error in call-rejected handler:', error);
+        }
+    });
+    
+    socket.on('call-offer', async (data) => {
+        try {
+            console.log('Call offer received:', data);
+            
+            const { offer, callerId, calleeId } = data;
+            
+            // Find callee by uid
+            const callee = await User.findOne({ uid: calleeId });
+            if (!callee || !callee.socketid) {
+                return;
+            }
+            
+            // Send offer to callee
+            io.to(callee.socketid).emit('call-offer', {
+                offer,
+                callerId,
+                calleeId
+            });
+        } catch (error) {
+            console.error('Error in call-offer handler:', error);
+        }
+    });
+    
+    socket.on('call-answer', async (data) => {
+        try {
+            console.log('Call answer received:', data);
+            
+            const { answer, callerId, calleeId } = data;
+            
+            // Find caller by uid
+            const caller = await User.findOne({ uid: callerId });
+            if (!caller || !caller.socketid) {
+                return;
+            }
+            
+            // Send answer to caller
+            io.to(caller.socketid).emit('call-answer', {
+                answer,
+                callerId,
+                calleeId
+            });
+        } catch (error) {
+            console.error('Error in call-answer handler:', error);
+        }
+    });
+    
+    socket.on('ice-candidate', async (data) => {
+        try {
+            console.log('ICE candidate:', data);
+            
+            const { candidate, callerId, calleeId } = data;
+            
+            // Find the recipient (could be either caller or callee)
+            let recipientId;
+            
+            // Determine who should receive this ICE candidate
+            // If the sender is the caller, send to callee
+            const sender = await User.findOne({ socketid: socket.id });
+            if (!sender) return;
+            
+            if (sender.uid === callerId) {
+                recipientId = calleeId;
+            } else {
+                recipientId = callerId;
+            }
+            
+            // Find recipient
+            const recipient = await User.findOne({ uid: recipientId });
+            if (!recipient || !recipient.socketid) {
+                return;
+            }
+            
+            // Send ICE candidate to recipient
+            io.to(recipient.socketid).emit('ice-candidate', {
+                candidate,
+                callerId,
+                calleeId
+            });
+        } catch (error) {
+            console.error('Error in ice-candidate handler:', error);
+        }
+    });
+    
+    socket.on('call-ended', async (data) => {
+        try {
+            console.log('Call ended:', data);
+            
+            const { callerId, calleeId } = data;
+            
+            // Find both users
+            const caller = await User.findOne({ uid: callerId });
+            const callee = await User.findOne({ uid: calleeId });
+            
+            // Notify caller if not the one who ended the call
+            if (caller && caller.socketid && caller.socketid !== socket.id) {
+                io.to(caller.socketid).emit('call-ended', {
+                    callerId,
+                    calleeId
+                });
+            }
+            
+            // Notify callee if not the one who ended the call
+            if (callee && callee.socketid && callee.socketid !== socket.id) {
+                io.to(callee.socketid).emit('call-ended', {
+                    callerId,
+                    calleeId
+                });
+            }
+        } catch (error) {
+            console.error('Error in call-ended handler:', error);
+        }
+    });
+
     // All other socket handlers should remain intact
 });
 
