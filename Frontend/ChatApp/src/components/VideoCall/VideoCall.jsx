@@ -5,6 +5,9 @@ import './VideoCall.css';
 // Ringtone URL
 const RINGTONE_URL = 'https://cdn.pixabay.com/audio/2022/11/20/audio_662f2ae340.mp3';
 
+// Metered API key for TURN server credentials
+const METERED_API_KEY = "54802f233bc4f94626bf76e1";
+
 // Fallback ICE servers with hardcoded credentials
 const FALLBACK_ICE_SERVERS = [
   {
@@ -83,6 +86,19 @@ const VideoCall = ({
   
   // Audio refs for notifications
   const ringtoneRef = useRef(new Audio(RINGTONE_URL));
+
+  // Add these state variables near the other state declarations
+  const [pendingIceCandidates, setPendingIceCandidates] = useState([]);
+  const remoteSdpSet = useRef(false);
+
+  // After the state variables declarations, add a useEffect that reacts to callType changes
+  useEffect(() => {
+    // Update audio/video states when callType changes
+    setIsAudioOnly(callType === 'audio');
+    setIsVideoEnabled(callType === 'video');
+    
+    console.log(`Call type changed to: ${callType}, isAudioOnly: ${callType === 'audio'}`);
+  }, [callType]);
 
   // Function to set up audio monitoring
   const setupAudioMonitoring = (stream) => {
@@ -187,26 +203,72 @@ const VideoCall = ({
     };
   }, []);
 
+  // Fetch ICE servers from Metered when component opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchIceServers();
+    }
+  }, [isOpen]);
+
+  // Function to fetch ICE servers from Metered API
+  const fetchIceServers = async () => {
+    try {
+      console.log('Fetching ICE servers from Metered API...');
+      const response = await fetch(`https://chatappv2.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ICE servers: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Received ICE servers:', data);
+      
+      setIceServers(data);
+      setAreIceServersReady(true);
+    } catch (error) {
+      console.error('Error fetching ICE servers:', error);
+      console.log('Using fallback ICE servers');
+      setAreIceServersReady(true); // Proceed with fallback servers
+    }
+  };
+
   // Initialize when component mounts
   useEffect(() => {
     if (isOpen) {
+      // Ensure the audio/video state is set correctly based on current callType
+      setIsAudioOnly(callType === 'audio');
+      setIsVideoEnabled(callType === 'video');
+      
       if (isIncoming) {
         // Ready to accept incoming call
         setIsLoading(false);
       } else {
-        // Start outgoing call
-        initializeCall();
+        // Start outgoing call, but only after ICE servers are ready
+        const initializeCallWithIceServers = async () => {
+          // Wait for ICE servers to be ready or timeout after 3 seconds
+          let attempts = 0;
+          while (!areIceServersReady && attempts < 30) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+          }
+          
+          // Proceed with call initialization
+          await initializeCall();
+        };
+        
+        initializeCallWithIceServers();
       }
     }
     
     return () => {
       cleanupCall();
     };
-  }, [isOpen]);
+  }, [isOpen, areIceServersReady, callType]);
   
   // Initialize local media and start call
   const initializeCall = async () => {
     try {
+      console.log(`Initializing call with type: ${callType}, isAudioOnly: ${isAudioOnly}`);
       setIsLoading(true);
       setError(null);
       
@@ -256,13 +318,16 @@ const VideoCall = ({
       }
       
       // Get local media stream based on call type and optimized constraints
+      const currentIsAudioOnly = callType === 'audio'; // Use callType directly to be safe
+      console.log(`Setting up media with callType=${callType}, isAudioOnly=${currentIsAudioOnly}`);
+
       const mediaConstraints = {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
         },
-        video: !isAudioOnly ? {
+        video: !currentIsAudioOnly ? {
           width: { ideal: idealWidth, max: idealWidth * 1.5 },
           height: { ideal: idealHeight, max: idealHeight * 1.5 },
           frameRate: { max: maxFrameRate },
@@ -280,7 +345,7 @@ const VideoCall = ({
         setupAudioMonitoring(stream);
         
         // For video calls, apply quality constraints to video tracks
-        if (!isAudioOnly && stream.getVideoTracks().length > 0) {
+        if (!currentIsAudioOnly && stream.getVideoTracks().length > 0) {
           const videoTrack = stream.getVideoTracks()[0];
           
           try {
@@ -321,7 +386,7 @@ const VideoCall = ({
           // Required device not found
           setError("Camera or microphone not found. Please check your devices.");
           
-          if (!isAudioOnly) {
+          if (!currentIsAudioOnly) {
             console.log("Attempting to fall back to audio-only mode");
             // Try to fallback to audio only if video was requested but failed
             try {
@@ -363,7 +428,7 @@ const VideoCall = ({
           try {
             const lowerQualityConstraints = {
               audio: true,
-              video: !isAudioOnly ? {
+              video: !currentIsAudioOnly ? {
                 width: { ideal: 320 },
                 height: { ideal: 240 },
                 frameRate: { max: 15 }
@@ -389,7 +454,7 @@ const VideoCall = ({
           }
         } else {
           // Generic error message
-          const errorMessage = isAudioOnly 
+          const errorMessage = currentIsAudioOnly 
             ? "Could not access microphone. Please check permissions and try again." 
             : "Could not access camera or microphone. Please check permissions and try again.";
           setError(errorMessage);
@@ -404,7 +469,206 @@ const VideoCall = ({
     }
   };
   
-  // Create and initialize the peer connection
+  // Start outgoing call
+  const startOutgoingCall = () => {
+    if (!socket) return;
+    
+    // Add debug logging
+    console.log(`Starting outgoing call: callType=${callType}, isAudioOnly=${isAudioOnly}`);
+    
+    // Emit call-user event to server
+    try {
+      const callTypeToSend = isAudioOnly ? 'audio' : 'video';
+      console.log(`Emitting call-user with callType: ${callTypeToSend}`);
+      
+      socket.emit('call-user', {
+        callerId: localUser.uid,
+        callerName: localUser.username || localUser.name,
+        calleeId: callee.uid,
+        callerProfilePic: localUser.profilepicture,
+        callType: callTypeToSend
+      });
+      
+      // Listen for call-accepted event
+      socket.once('call-accepted', async (data) => {
+        console.log('Call accepted by:', data);
+        setIsCallActive(true);
+        startCallTimer();
+        
+        // Now create peer connection and send offer
+        await createPeerConnection();
+      });
+    } catch (socketError) {
+      console.error('Error initiating call via socket:', socketError);
+      setError('Failed to start call. Please check your connection and try again.');
+      // Clean up and close the call UI if we can't even start the call
+      cleanupCall();
+      onClose();
+    }
+  };
+  
+  // Handle call acceptance (for incoming calls)
+  const handleAcceptCall = async () => {
+    if (!socket) return;
+    
+    try {
+      // Initialize local media first
+      await initializeCall();
+      
+      // Notify the caller that we accepted the call
+      socket.emit('call-accepted', {
+        callerId: caller.uid,
+        calleeId: localUser.uid
+      });
+      
+      // Update UI state
+      onAccept();
+      setIsCallActive(true);
+      startCallTimer();
+      
+      // The peer connection will be created when we receive the offer
+      // in the call-offer handler
+    } catch (err) {
+      console.error('Error accepting call:', err);
+      setError('Failed to accept call. Please try again.');
+    }
+  };
+  
+  // Add this new useEffect for handling ICE candidates
+  useEffect(() => {
+    if (!socket || !isOpen) return;
+    
+    // Handler for ICE candidates from the remote peer
+    const handleIceCandidate = async (data) => {
+      try {
+        console.log('Received ICE candidate:', data);
+        
+        // For incoming calls, check if this candidate is for us
+        const isForUs = (isIncoming && 
+                         data.callerId === caller.uid && 
+                         data.calleeId === localUser.uid) ||
+                        (!isIncoming && 
+                         data.callerId === localUser.uid && 
+                         data.calleeId === callee.uid);
+        
+        if (!isForUs) return;
+        
+        // Create an RTCIceCandidate
+        const candidate = new RTCIceCandidate(data.candidate);
+        
+        // If peer connection exists and remote description is set, add candidate
+        if (peerConnectionRef.current && remoteSdpSet.current) {
+          await peerConnectionRef.current.addIceCandidate(candidate);
+          console.log('Added ICE candidate');
+        } else {
+          // Otherwise, store for later
+          console.log('Storing ICE candidate for later');
+          setPendingIceCandidates(prev => [...prev, candidate]);
+        }
+      } catch (err) {
+        console.error('Error handling ICE candidate:', err);
+      }
+    };
+    
+    socket.on('ice-candidate', handleIceCandidate);
+    
+    return () => {
+      socket.off('ice-candidate', handleIceCandidate);
+    };
+  }, [socket, isOpen, isIncoming, caller, callee, localUser]);
+  
+  // Modify the useEffect that handles call offers
+  useEffect(() => {
+    if (!socket || !isOpen) return;
+
+    // Listen for call-offer events (this contains the actual WebRTC offer)
+    const handleCallOffer = async (data) => {
+      try {
+        console.log('Received call offer:', data);
+        
+        // For incoming calls, now we create the peer connection when we have the offer
+        if (isIncoming && data.callerId === caller.uid && data.calleeId === localUser.uid) {
+          // Update isAudioOnly based on the offer's callType if it's provided
+          if (data.callType) {
+            const isAudioOnlyCall = data.callType === 'audio';
+            console.log(`Offer specifies callType=${data.callType}, updating isAudioOnly=${isAudioOnlyCall}`);
+            setIsAudioOnly(isAudioOnlyCall);
+            setIsVideoEnabled(!isAudioOnlyCall);
+          }
+          
+          // Create peer connection
+          if (!peerConnectionRef.current) {
+            // Create a new RTCPeerConnection
+            peerConnectionRef.current = new RTCPeerConnection({ 
+              iceServers: iceServers
+            });
+            
+            // Add local stream tracks to the connection
+            if (localStreamRef.current) {
+              localStreamRef.current.getTracks().forEach(track => {
+                peerConnectionRef.current.addTrack(track, localStreamRef.current);
+              });
+            }
+            
+            // Listen for ICE candidates
+            peerConnectionRef.current.onicecandidate = (event) => {
+              if (event.candidate) {
+                // Send the candidate to the remote peer
+                try {
+                  socket.emit('ice-candidate', {
+                    candidate: event.candidate,
+                    callerId: caller.uid,
+                    calleeId: localUser.uid
+                  });
+                } catch (socketError) {
+                  console.error('Error sending ICE candidate via socket:', socketError);
+                }
+              }
+            };
+            
+            // Listen for remote stream
+            peerConnectionRef.current.ontrack = (event) => {
+              console.log('Remote track received:', event);
+              
+              if (remoteVideoRef.current && event.streams && event.streams[0]) {
+                remoteVideoRef.current.srcObject = event.streams[0];
+                
+                // Set up audio monitoring for the remote stream
+                setupRemoteAudioMonitoring(event.streams[0]);
+              }
+            };
+          }
+          
+          // Set the remote description (this is the offer)
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
+          remoteSdpSet.current = true;
+          
+          // Add any pending ICE candidates
+          if (pendingIceCandidates.length > 0) {
+            console.log(`Adding ${pendingIceCandidates.length} pending ICE candidates`);
+            for (const candidate of pendingIceCandidates) {
+              await peerConnectionRef.current.addIceCandidate(candidate);
+            }
+            setPendingIceCandidates([]);
+          }
+          
+          // Now create and send an answer
+          await createAndSendAnswer();
+        }
+      } catch (err) {
+        console.error('Error handling call offer:', err);
+        setError('Failed to process incoming call. Please try again.');
+      }
+    };
+
+    socket.on('call-offer', handleCallOffer);
+    
+    return () => {
+      socket.off('call-offer', handleCallOffer);
+    };
+  }, [socket, isOpen, isIncoming, caller, localUser, iceServers, pendingIceCandidates]);
+  
+  // Create and initialize the peer connection - only for outgoing calls now
   const createPeerConnection = async () => {
     try {
       console.log('Creating peer connection with ICE servers:', iceServers);
@@ -589,11 +853,8 @@ const VideoCall = ({
         }
       };
       
-      // If this is incoming call, create and send an answer
-      if (isIncoming) {
-        // Create an answer to the offer
-        await createAndSendAnswer();
-      } else {
+      // For outgoing calls, create and send an offer
+      if (!isIncoming) {
         // Create and send an offer
         await createAndSendOffer();
       }
@@ -614,9 +875,13 @@ const VideoCall = ({
     }
     
     try {
+      // Use callType directly to be safe
+      const isAudioOnlyCall = callType === 'audio';
+      console.log(`Creating offer with callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
+      
       const offer = await peerConnectionRef.current.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: !isAudioOnly
+        offerToReceiveVideo: !isAudioOnlyCall
       });
       
       await peerConnectionRef.current.setLocalDescription(offer);
@@ -627,8 +892,11 @@ const VideoCall = ({
           offer: offer,
           callerId: localUser.uid,
           calleeId: callee.uid,
-          callType: isAudioOnly ? 'audio' : 'video'
+          callType: isAudioOnlyCall ? 'audio' : 'video'
         });
+        
+        // Set this flag so we know we can add ICE candidates directly
+        remoteSdpSet.current = false; // We haven't received the answer yet
       } catch (socketError) {
         console.error('Error sending call offer via socket:', socketError);
         setError('Failed to send call offer. Please check your connection and try again.');
@@ -647,9 +915,13 @@ const VideoCall = ({
     }
     
     try {
+      // Use callType directly to be safe
+      const isAudioOnlyCall = callType === 'audio';
+      console.log(`Creating answer with callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
+      
       const answer = await peerConnectionRef.current.createAnswer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: true
+        offerToReceiveVideo: !isAudioOnlyCall
       });
       
       await peerConnectionRef.current.setLocalDescription(answer);
@@ -659,8 +931,13 @@ const VideoCall = ({
         socket.emit('call-answer', {
           answer: answer,
           callerId: caller.uid,
-          calleeId: localUser.uid
+          calleeId: localUser.uid,
+          callType: isAudioOnlyCall ? 'audio' : 'video'
         });
+        
+        // We've already set the remote description (the offer)
+        // and now we've set our local description (the answer)
+        remoteSdpSet.current = true;
       } catch (socketError) {
         console.error('Error sending call answer via socket:', socketError);
         setError('Failed to send call answer. Please check your connection and try again.');
@@ -669,39 +946,6 @@ const VideoCall = ({
       console.error('Error creating answer:', err);
       setError('Failed to create call answer. Please try again.');
     }
-  };
-  
-  // Start outgoing call
-  const startOutgoingCall = () => {
-    if (!socket) return;
-    
-    // Emit call-user event to server
-    try {
-      socket.emit('call-user', {
-        callerId: localUser.uid,
-        callerName: localUser.username || localUser.name,
-        calleeId: callee.uid,
-        callerProfilePic: localUser.profilepicture,
-        callType: isAudioOnly ? 'audio' : 'video'
-      });
-    } catch (socketError) {
-      console.error('Error initiating call via socket:', socketError);
-      setError('Failed to start call. Please check your connection and try again.');
-      // Clean up and close the call UI if we can't even start the call
-      cleanupCall();
-      onClose();
-    }
-  };
-  
-  // Handle call acceptance (for incoming calls)
-  const handleAcceptCall = async () => {
-    await initializeCall();
-    onAccept();
-    setIsCallActive(true);
-    startCallTimer();
-    
-    // Create peer connection for the call
-    await createPeerConnection();
   };
   
   // Handle rejection/ending call
@@ -905,6 +1149,48 @@ const VideoCall = ({
       checkCameraSupport();
     }
   }, [isOpen, isAudioOnly]);
+
+  // Add a new useEffect for handling call answers
+  useEffect(() => {
+    if (!socket || !isOpen || isIncoming) return; // Only for outgoing calls
+    
+    // Handler for call answer from the callee
+    const handleCallAnswer = async (data) => {
+      try {
+        console.log('Received call answer:', data);
+        
+        // Make sure this answer is for our call
+        if (data.callerId === localUser.uid && data.calleeId === callee.uid) {
+          if (!peerConnectionRef.current) {
+            console.error('Peer connection not initialized when answer received');
+            return;
+          }
+          
+          // Set the remote description (the answer)
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+          remoteSdpSet.current = true;
+          
+          // Add any pending ICE candidates
+          if (pendingIceCandidates.length > 0) {
+            console.log(`Adding ${pendingIceCandidates.length} pending ICE candidates`);
+            for (const candidate of pendingIceCandidates) {
+              await peerConnectionRef.current.addIceCandidate(candidate);
+            }
+            setPendingIceCandidates([]);
+          }
+        }
+      } catch (err) {
+        console.error('Error handling call answer:', err);
+        setError('Failed to establish connection. Please try again.');
+      }
+    };
+    
+    socket.on('call-answer', handleCallAnswer);
+    
+    return () => {
+      socket.off('call-answer', handleCallAnswer);
+    };
+  }, [socket, isOpen, isIncoming, localUser, callee, pendingIceCandidates]);
 
   return (
     <div className={`video-call-container ${isOpen ? 'active' : ''}`}>
