@@ -286,12 +286,24 @@ const VoiceCall = ({
     // Handle incoming answer for outgoing call
     const handleAnswer = async (data) => {
         try {
-            console.log('Call answered, setting remote description');
+            console.log('Call answered, received data:', data);
             const { answer } = data;
             
+            if (!answer || !answer.sdp) {
+                console.error('Invalid answer format received:', answer);
+                throw new Error('Invalid answer format');
+            }
+            
             if (peerConnectionRef.current) {
-                console.log('Setting remote description from answer');
-                await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+                console.log('Setting remote description from answer:', answer);
+                
+                // Ensure answer is properly formatted as RTCSessionDescription
+                const formattedAnswer = {
+                    type: answer.type || 'answer',
+                    sdp: answer.sdp
+                };
+                
+                await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(formattedAnswer));
                 console.log('Remote description set successfully');
                 
                 // Process any queued ICE candidates now that remote description is set
@@ -336,9 +348,15 @@ const VoiceCall = ({
                 await peerConnectionRef.current.setLocalDescription(answer);
                 console.log('Local description set');
 
+                // Format the answer properly before sending
+                const formattedAnswer = {
+                    type: answer.type,
+                    sdp: answer.sdp
+                };
+
                 console.log('Sending answer to caller with ID:', storedOffer.from);
                 socket.emit('call-answered', {
-                    answer,
+                    answer: formattedAnswer,
                     to: storedOffer.from
                 });
                 console.log('Answer sent to caller');
@@ -536,6 +554,14 @@ const VoiceCall = ({
         // Handle call answered event
         const handleCallAnswered = async (data) => {
             console.log('Call answered event received', data);
+            
+            // Validate the data structure
+            if (!data || !data.answer) {
+                console.error('Invalid call-answered data format:', data);
+                setError('Call connection failed due to invalid data');
+                return;
+            }
+            
             await handleAnswer(data);
         };
         
@@ -618,14 +644,30 @@ const VoiceCall = ({
             if (peerConnectionRef.current && iceCandidatesQueue.current.length > 0) {
                 console.log(`Processing ${iceCandidatesQueue.current.length} queued ICE candidates`);
                 
+                // Make a copy of the queue to prevent issues during processing
+                const candidates = [...iceCandidatesQueue.current];
+                iceCandidatesQueue.current = [];
+                
                 // Process all queued candidates
-                for (const candidate of iceCandidatesQueue.current) {
-                    await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-                    console.log('Added queued ICE candidate');
+                for (const candidate of candidates) {
+                    try {
+                        if (peerConnectionRef.current.remoteDescription) {
+                            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+                            console.log('Added queued ICE candidate successfully');
+                        } else {
+                            console.warn('Remote description still not set, re-queuing candidate');
+                            iceCandidatesQueue.current.push(candidate);
+                        }
+                    } catch (candidateError) {
+                        console.error('Error adding specific ICE candidate:', candidateError);
+                        // Continue processing other candidates even if one fails
+                    }
                 }
                 
-                // Clear the queue
-                iceCandidatesQueue.current = [];
+                // If we had to re-queue some, log this fact
+                if (iceCandidatesQueue.current.length > 0) {
+                    console.log(`${iceCandidatesQueue.current.length} candidates re-queued due to missing remote description`);
+                }
             }
         } catch (err) {
             console.error('Error processing queued ICE candidates:', err);
