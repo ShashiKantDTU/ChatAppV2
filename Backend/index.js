@@ -813,6 +813,10 @@ io.on('connection', (socket) => {
                 throw new Error('Calling user not available');
             }
 
+            // Get the current user's ID for sending with the answer
+            const answeringUser = await User.findOne({ socketid: socket.id });
+            const from = answeringUser ? answeringUser.uid : null;
+
             console.log('Sending answer to caller:', callingUser.socketid);
             
             // Always ensure the answer has the correct type
@@ -824,7 +828,8 @@ io.on('connection', (socket) => {
             console.log('Sending formatted answer:', formattedAnswer);
             
             io.to(callingUser.socketid).emit('call-answered', {
-                answer: formattedAnswer
+                answer: formattedAnswer,
+                from: from // Include the answerer's ID
             });
         } catch (error) {
             console.error('Error in call-answered handler:', error);
@@ -834,13 +839,32 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('ice-candidate', async ({ to, candidate }) => {
+    socket.on('ice-candidate', async ({ to, candidate, from }) => {
         try {
+            console.log('ICE candidate received:', {
+                to,
+                from,
+                candidateType: candidate?.candidate ? candidate.candidate.split(' ')[7] : 'unknown' // Log candidate type (host, srflx, relay)
+            });
+
+            // If 'from' is not provided, try to get the sender's ID
+            let senderId = from;
+            if (!senderId) {
+                const senderUser = await User.findOne({ socketid: socket.id });
+                senderId = senderUser ? senderUser.uid : null;
+                console.log('Retrieved sender ID from database:', senderId);
+            }
+
             const user = await User.findOne({ uid: to });
             if (user && user.socketid) {
+                // Forward the ICE candidate WITH the sender's ID
                 io.to(user.socketid).emit('ice-candidate', {
-                    candidate
+                    candidate,
+                    from: senderId // Include the sender's ID to help filter self-sent candidates
                 });
+                console.log('ICE candidate forwarded to:', user.uid);
+            } else {
+                console.log('Target user not available for ICE candidate:', to);
             }
         } catch (error) {
             console.error('Error in ice-candidate handler:', error);
@@ -850,9 +874,20 @@ io.on('connection', (socket) => {
     // Change event name from 'end-call' to 'call-ended' for consistency with frontend
     socket.on('call-ended', async ({ to }) => {
         try {
+            // Get the current user's ID
+            const endingUser = await User.findOne({ socketid: socket.id });
+            const from = endingUser ? endingUser.uid : null;
+            
+            console.log('Call ended by user:', from);
+            
             const user = await User.findOne({ uid: to });
             if (user && user.socketid) {
-                io.to(user.socketid).emit('call-ended');
+                io.to(user.socketid).emit('call-ended', {
+                    from // Include the ender's ID
+                });
+                console.log('Call end notification sent to:', user.uid);
+            } else {
+                console.log('Target user not available for call-ended notification:', to);
             }
         } catch (error) {
             console.error('Error in call-ended handler:', error);
@@ -862,11 +897,21 @@ io.on('connection', (socket) => {
     // Add handler for call-rejected event
     socket.on('call-rejected', async ({ to }) => {
         try {
+            // Get the current user's ID
+            const rejectingUser = await User.findOne({ socketid: socket.id });
+            const from = rejectingUser ? rejectingUser.uid : null;
+            
+            console.log('Call rejected by user:', from);
+            
             const user = await User.findOne({ uid: to });
             if (user && user.socketid) {
                 io.to(user.socketid).emit('call-rejected', {
-                    message: 'Call was rejected'
+                    message: 'Call was rejected',
+                    from // Include the rejector's ID
                 });
+                console.log('Call rejection notification sent to:', user.uid);
+            } else {
+                console.log('Target user not available for call-rejected notification:', to);
             }
         } catch (error) {
             console.error('Error in call-rejected handler:', error);
