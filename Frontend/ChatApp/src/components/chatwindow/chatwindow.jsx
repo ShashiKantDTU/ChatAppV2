@@ -990,6 +990,8 @@ const ChatWindow = (props) => {
                 callerName: callData.callerName,
                 callerProfilePic: callData.callerProfilePic
             });
+            // Set the call type based on what was received (default to video if not specified)
+            setCallType(callData.callType || 'video');
             setShowCallUI(true);
         });
         

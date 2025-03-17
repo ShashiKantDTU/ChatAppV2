@@ -15,6 +15,7 @@ const configureSession = require('./config/session');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
+const fetch = require('node-fetch');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -106,6 +107,54 @@ const storage = new CloudinaryStorage({
             'json', 'xml', 'yaml', 'py'
         ],
         transformation: { quality: 'auto' }
+    }
+});
+
+// Add endpoint to fetch ICE server credentials
+app.get('/api/ice-servers', async (req, res) => {
+    try {
+        // Get Metered API key from environment variables
+        const METERED_API_KEY = process.env.METERED_API_KEY || '0b3cef3685935b3424354cbea99c073db622';
+        
+        // Fetch fresh ICE servers from Metered.ca
+        const response = await fetch(
+            `https://shashikant.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`
+        );
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch ICE servers: ${response.status}`);
+        }
+        
+        const iceServers = await response.json();
+        console.log('Providing ICE servers to client');
+        
+        // Return the ICE servers to the client
+        res.json({ iceServers });
+    } catch (error) {
+        console.error('Error fetching ICE servers:', error);
+        
+        // Provide fallback ICE servers
+        const fallbackServers = [
+            {
+                urls: "stun:stun.relay.metered.ca:80",
+            },
+            {
+                urls: "turn:global.relay.metered.ca:80",
+                username: "54802f233bc4f94626bf76e1",
+                credential: "ipCZUvoLoYzVeHVz",
+            },
+            {
+                urls: "turn:global.relay.metered.ca:80?transport=tcp",
+                username: "54802f233bc4f94626bf76e1",
+                credential: "ipCZUvoLoYzVeHVz",
+            }
+        ];
+        
+        res.json({ 
+            iceServers: fallbackServers,
+            fromFallback: true,
+            error: error.message
+        });
     }
 });
 

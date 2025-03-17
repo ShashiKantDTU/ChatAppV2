@@ -100,6 +100,45 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
+.camera-switch-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
+  padding: 0;
+}
+
+.camera-switch-button:hover {
+  background-color: rgba(0, 0, 0, 0.7);
+  transform: scale(1.1);
+}
+
+.camera-switch-button.switching {
+  animation: rotate 1s infinite linear;
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .remote-video, .local-video {
   width: 100%;
   height: 100%;
@@ -238,6 +277,13 @@
     width: 48px;
     height: 48px;
   }
+  
+  .camera-switch-button {
+    width: 28px;
+    height: 28px;
+    top: 4px;
+    right: 4px;
+  }
 }
 
 /* Add styles for audio-only call mode */
@@ -298,41 +344,56 @@
   margin-top: 1rem;
 }
 
-/* Add a simple animation to show call is active */
+/* Add styles for the dynamic audio visualization */
 .audio-only-container .audio-waves {
   display: flex;
   justify-content: center;
-  align-items: center;
-  height: 40px;
-  width: 80px;
+  align-items: flex-end;
+  height: 60px;
+  width: 100px;
   margin: 1rem auto;
 }
 
 .audio-only-container .audio-wave {
   background: linear-gradient(to bottom, #2ecc71, #27ae60);
-  height: 100%;
   width: 6px;
   margin: 0 3px;
   border-radius: 3px;
-  animation: audio-wave 1s infinite ease-in-out;
+  transition: height 0.1s ease-in-out;
+  min-height: 5px;
 }
 
-.audio-only-container .audio-wave:nth-child(2) {
-  animation-delay: 0.2s;
+/* Speaking indicator styles */
+.speaking-indicator {
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
 }
 
-.audio-only-container .audio-wave:nth-child(3) {
-  animation-delay: 0.4s;
+.local-speaking {
+  background-color: rgba(46, 204, 113, 0.2);
+  color: #2ecc71;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  animation: pulse-text 1.5s infinite;
 }
 
-.audio-only-container .audio-wave:nth-child(4) {
-  animation-delay: 0.6s;
+@keyframes pulse-text {
+  0% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.7;
+  }
 }
 
-.audio-only-container .audio-wave:nth-child(5) {
-  animation-delay: 0.8s;
-}
-
+/* Remove any old animations that might conflict */
 @keyframes audio-wave {
   0%, 100% {
     transform: scaleY(0.3);
