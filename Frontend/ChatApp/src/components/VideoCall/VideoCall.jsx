@@ -325,7 +325,43 @@ const VideoCall = ({
     };
   }, [isOpen, areIceServersReady, callType]);
   
-  // Modify the initialize call function to check if already initialized
+  // Add a function to create a mobile-friendly stream with minimal resource usage
+  const createLightweightStream = async (isAudioOnly) => {
+    console.log('Creating lightweight media stream for mobile');
+    
+    try {
+      // For video, use absolute minimum viable constraints
+      const constraints = {
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          // Reduce sample rate for less CPU usage
+          sampleRate: 16000
+        },
+        video: !isAudioOnly ? {
+          width: { ideal: 320, max: 640 },
+          height: { ideal: 240, max: 480 },
+          frameRate: { ideal: 15, max: 20 }
+        } : false
+      };
+      
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      console.error('Error creating lightweight stream:', err);
+      // Last resort - try with absolute minimum
+      return await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: !isAudioOnly ? { 
+          width: 320, 
+          height: 240, 
+          frameRate: 10 
+        } : false
+      });
+    }
+  };
+
+  // Modify the initialize call function to be more mobile-friendly
   const initializeCall = async () => {
     try {
       // Prevent double initialization
@@ -342,6 +378,37 @@ const VideoCall = ({
       console.log(`Initializing call with type: ${callType}, isAudioOnly: ${currentIsAudioOnly}`);
       setIsLoading(true);
       setError(null);
+      
+      // Different optimization strategy for mobile
+      if (isMobileDevice) {
+        console.log('Using mobile-optimized call initialization');
+        
+        try {
+          // Use a lightweight stream creation approach for mobile
+          const mobileStream = await createLightweightStream(currentIsAudioOnly);
+          console.log('Got mobile-optimized stream');
+          
+          localStreamRef.current = mobileStream;
+          
+          // Skip advanced stream processing on mobile to conserve resources
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = mobileStream;
+          }
+          
+          setIsLoading(false);
+          
+          // If this is an outgoing call, start the call process
+          if (!isIncoming) {
+            startOutgoingCall();
+          }
+          return;
+        } catch (mobileErr) {
+          console.error('Mobile-optimized approach failed:', mobileErr);
+          // Fall back to standard approach if mobile optimization fails
+        }
+      }
+      
+      // Standard desktop approach (or fallback for mobile if optimized approach failed)
       
       // Detect if the device is mobile or has limited capabilities
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -436,16 +503,37 @@ const VideoCall = ({
       
       console.log(`Requesting media with browser-compatible constraints:`, JSON.stringify(mediaConstraints, null, 2));
       
+      // Add timeout to media request to prevent UI blocking
+      let mediaStreamAcquired = false;
+      let stream;
+      
+      const mediaPromise = navigator.mediaDevices.getUserMedia(mediaConstraints)
+        .then(acquiredStream => {
+          mediaStreamAcquired = true;
+          stream = acquiredStream;
+        });
+      
+      const mediaTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          if (!mediaStreamAcquired) {
+            reject(new Error('Media acquisition timed out'));
+          }
+        }, 15000); // 15 second timeout
+      });
+      
       try {
-        // First try with these simplified constraints
-        const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+        // Wait for media with timeout
+        await Promise.race([mediaPromise, mediaTimeoutPromise]);
+        
         console.log('Got media stream with tracks:', 
                     stream.getTracks().map(t => `${t.kind} (${t.label}) enabled:${t.enabled}`));
         
         localStreamRef.current = stream;
         
-        // Set up audio monitoring for the local stream
-        setupAudioMonitoring(stream);
+        // Set up audio monitoring for the local stream - but skip on mobile
+        if (!isMobileDevice) {
+          setupAudioMonitoring(stream);
+        }
         
         // For video calls, apply quality constraints to video tracks
         if (!currentIsAudioOnly && stream.getVideoTracks().length > 0) {
@@ -755,6 +843,8 @@ const VideoCall = ({
         
         // For incoming calls, now we create the peer connection when we have the offer
         if (isIncoming && data.callerId === caller.uid && data.calleeId === localUser.uid) {
+          console.log('Processing incoming call offer from:', data.callerId);
+          
           // Update isAudioOnly based on the offer's callType if it's provided
           if (data.callType) {
             const isAudioOnlyCall = data.callType === 'audio';
@@ -785,6 +875,17 @@ const VideoCall = ({
           if (!peerConnectionRef.current) {
             console.log('Creating new peer connection for incoming call');
             
+            // Stop any existing local media stream to avoid resource conflicts on mobile
+            if (localStreamRef.current) {
+              try {
+                console.log('Stopping existing local stream to free up resources');
+                localStreamRef.current.getTracks().forEach(track => track.stop());
+                localStreamRef.current = null;
+              } catch (err) {
+                console.warn('Error stopping previous stream:', err);
+              }
+            }
+
             // Create a new RTCPeerConnection with improved configuration
             let rtcConfig = {
               iceServers: iceServers,
@@ -795,35 +896,144 @@ const VideoCall = ({
               sdpSemantics: 'unified-plan'
             };
             
-            // For mobile, optimize configuration
+            // For mobile, optimize configuration to prevent crashes
             if (isMobileDevice) {
               console.log('Using mobile-optimized RTC configuration for incoming call');
               rtcConfig = {
                 ...rtcConfig,
-                iceCandidatePoolSize: 5,
+                iceCandidatePoolSize: 2, // Reduce pool size significantly for mobile
+                iceTransportPolicy: 'all',
+                // Use lighter settings to avoid memory issues
+                bundlePolicy: 'balanced',
               };
             }
             
-            peerConnectionRef.current = new RTCPeerConnection(rtcConfig);
-            
-            // Rest of the peer connection setup...
-          }
-          
-          // Set the remote description (this is the offer)
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-          remoteSdpSet.current = true;
-          
-          // Add any pending ICE candidates
-          if (pendingIceCandidates.length > 0) {
-            console.log(`Adding ${pendingIceCandidates.length} pending ICE candidates`);
-            for (const candidate of pendingIceCandidates) {
-              await peerConnectionRef.current.addIceCandidate(candidate);
+            // Create the peer connection with a try-catch to handle potential crashes
+            try {
+              peerConnectionRef.current = new RTCPeerConnection(rtcConfig);
+              console.log('Peer connection created successfully');
+              
+              // Set up basic event handlers
+              peerConnectionRef.current.onicecandidate = (event) => {
+                if (event.candidate) {
+                  try {
+                    socket.emit('ice-candidate', {
+                      candidate: event.candidate,
+                      callerId: caller.uid, 
+                      calleeId: localUser.uid
+                    });
+                  } catch (err) {
+                    console.error('Error sending ICE candidate:', err);
+                  }
+                }
+              };
+              
+              peerConnectionRef.current.ontrack = (event) => {
+                console.log('Received remote track:', event.track.kind);
+                
+                if (remoteVideoRef.current && event.streams && event.streams[0]) {
+                  remoteVideoRef.current.srcObject = event.streams[0];
+                }
+              };
+            } catch (peerError) {
+              console.error('Failed to create peer connection:', peerError);
+              setError('Failed to start call. Your device may not support WebRTC calls.');
+              return;
             }
-            setPendingIceCandidates([]);
           }
           
-          // Now create and send an answer
-          await createAndSendAnswer();
+          // Before setting remote description, check if the SDP needs modification for mobile compatibility
+          let modifiedOffer = data.offer;
+          
+          if (isMobileDevice) {
+            console.log('Modifying incoming offer for mobile compatibility');
+            try {
+              // Clone the offer to modify it
+              const offerToModify = new RTCSessionDescription(data.offer);
+              
+              // For mobile devices, limit video resolution and bitrate in the SDP
+              // This helps prevent mobile device crashes due to high resource usage
+              let modifiedSdp = offerToModify.sdp;
+              
+              // Reduce video resolution and bitrate
+              modifiedSdp = modifiedSdp.replace(/(m=video.*\r\n)/g, '$1b=AS:256\r\n');
+              
+              // Limit audio bitrate too to reduce overall resource usage
+              modifiedSdp = modifiedSdp.replace(/(m=audio.*\r\n)/g, '$1b=AS:32\r\n');
+              
+              // Create modified offer object
+              modifiedOffer = {
+                type: offerToModify.type,
+                sdp: modifiedSdp
+              };
+              
+              console.log('Successfully modified offer SDP for mobile');
+            } catch (modifyError) {
+              console.warn('Could not modify offer for mobile, using original:', modifyError);
+            }
+          }
+          
+          // Set the remote description with a timeout to avoid blocking UI
+          try {
+            // Add a timeout for the setRemoteDescription operation to prevent hanging
+            const setRemoteDescriptionWithTimeout = async () => {
+              let descriptionSet = false;
+              
+              // Set remote description (this is the offer)
+              const descriptionPromise = peerConnectionRef.current.setRemoteDescription(
+                new RTCSessionDescription(modifiedOffer)
+              ).then(() => {
+                descriptionSet = true;
+                remoteSdpSet.current = true;
+                console.log('Remote description set successfully');
+              });
+              
+              // Add a timeout to prevent UI from freezing
+              const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => {
+                  if (!descriptionSet) {
+                    reject(new Error('Setting remote description timed out'));
+                  }
+                }, 5000); // 5 second timeout
+              });
+              
+              try {
+                await Promise.race([descriptionPromise, timeoutPromise]);
+              } catch (err) {
+                console.error('Error or timeout setting remote description:', err);
+                setError('Call setup is taking too long. Try again with a better connection.');
+                throw err;
+              }
+            };
+            
+            await setRemoteDescriptionWithTimeout();
+            
+            // Add any pending ICE candidates
+            if (pendingIceCandidates.length > 0) {
+              console.log(`Adding ${pendingIceCandidates.length} pending ICE candidates`);
+              for (const candidate of pendingIceCandidates) {
+                try {
+                  await peerConnectionRef.current.addIceCandidate(candidate);
+                } catch (candidateError) {
+                  console.warn('Error adding ICE candidate:', candidateError);
+                  // Continue with other candidates even if one fails
+                }
+              }
+              setPendingIceCandidates([]);
+            }
+            
+            // Now create and send an answer
+            await createAndSendAnswer();
+          } catch (descriptionError) {
+            console.error('Error setting remote description:', descriptionError);
+            setError('Failed to process call. Please try again later.');
+            
+            // Clean up on error to allow future calls
+            if (peerConnectionRef.current) {
+              peerConnectionRef.current.close();
+              peerConnectionRef.current = null;
+            }
+          }
         }
       } catch (err) {
         console.error('Error handling call offer:', err);
@@ -836,7 +1046,7 @@ const VideoCall = ({
     return () => {
       socket.off('call-offer', handleCallOffer);
     };
-  }, [socket, isOpen, isIncoming, caller, localUser, iceServers, pendingIceCandidates]);
+  }, [socket, isOpen, isIncoming, caller, localUser, iceServers, pendingIceCandidates, isMobileDevice]);
   
   // Modify the createPeerConnection function to improve cross-device compatibility
   const createPeerConnection = async () => {
@@ -1271,23 +1481,81 @@ const VideoCall = ({
       const isAudioOnlyCall = callType === 'audio';
       console.log(`Creating offer with callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
       
-      // Create offer with optimized options for cross-device compatibility
-      const offerOptions = {
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: !isAudioOnlyCall
-      };
+      // Mobile-optimized options to prevent crashes
+      let offerOptions;
+      
+      if (isMobileDevice) {
+        console.log('Using mobile-optimized offer options');
+        offerOptions = {
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: !isAudioOnlyCall,
+          iceRestart: false, // Simpler ICE handling
+          voiceActivityDetection: true // Reduces processing when silent
+        };
+      } else {
+        // Desktop options with better quality
+        offerOptions = {
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: !isAudioOnlyCall
+        };
+      }
       
       console.log('Creating offer with options:', offerOptions);
-      const offer = await peerConnectionRef.current.createOffer(offerOptions);
+      
+      // Add a timeout for creating offer to prevent UI blocking
+      let offerCreated = false;
+      let offer;
+      
+      const createOfferPromise = peerConnectionRef.current.createOffer(offerOptions)
+        .then(createdOffer => {
+          offerCreated = true;
+          offer = createdOffer;
+        });
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          if (!offerCreated) {
+            reject(new Error('Create offer timed out'));
+          }
+        }, 5000); // 5 second timeout
+      });
+      
+      try {
+        await Promise.race([createOfferPromise, timeoutPromise]);
+      } catch (err) {
+        console.error('Error or timeout creating offer:', err);
+        setError('Call setup is taking too long. Check your connection and try again.');
+        throw err;
+      }
       
       // Modify the SDP for better mobile compatibility
       let modifiedSDP = offer.sdp;
       
-      // If calling from laptop to mobile, ensure video bitrate is capped
-      if (!isMobileDevice && !isAudioOnlyCall) {
-        console.log('Modifying SDP for laptop-to-mobile video call');
-        // Add b=AS:512 to limit bitrate to 512 kbps for video
-        modifiedSDP = modifiedSDP.replace(/(m=video.*\r\n)/g, '$1b=AS:512\r\n');
+      if (isMobileDevice) {
+        // For mobile devices sending to any device
+        console.log('Optimizing SDP for mobile sender');
+        
+        // Lower video bitrate significantly for mobile senders
+        if (!isAudioOnlyCall) {
+          modifiedSDP = modifiedSDP.replace(/(m=video.*\r\n)/g, '$1b=AS:250\r\n');
+        }
+        
+        // Lower audio bitrate for mobile to conserve bandwidth
+        modifiedSDP = modifiedSDP.replace(/(m=audio.*\r\n)/g, '$1b=AS:32\r\n');
+      } else if (!isMobileDevice && !isAudioOnlyCall) {
+        // When laptop is calling a mobile device, need to be extra careful with video bitrate
+        console.log('Optimizing SDP for laptop-to-mobile video call');
+        
+        // Lower baseline bitrate to 350 kbps for video when calling from laptop to any device
+        // (mobile devices will have trouble processing high bitrate video)
+        modifiedSDP = modifiedSDP.replace(/(m=video.*\r\n)/g, '$1b=AS:350\r\n');
+        
+        // Add additional bandwidth and rendering hints
+        // This helps mobile browsers know they can lower resolution if needed
+        if (modifiedSDP.indexOf('a=content:main') === -1) {
+          modifiedSDP = modifiedSDP.replace(/(m=video.*\r\n)/g, 
+            '$1a=content:main\r\na=sctp-port:5000\r\n');
+        }
       }
       
       // Create a modified offer with the updated SDP
@@ -1333,10 +1601,11 @@ const VideoCall = ({
       const isAudioOnlyCall = callType === 'audio';
       console.log(`Creating answer with callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
       
-      // Create answer with optimized options for cross-device compatibility
+      // Mobile-optimized settings
       const answerOptions = {
         offerToReceiveAudio: true,
-        offerToReceiveVideo: !isAudioOnlyCall
+        offerToReceiveVideo: !isAudioOnlyCall,
+        voiceActivityDetection: true // Reduces CPU usage by detecting silence
       };
       
       console.log('Creating answer with options:', answerOptions);
@@ -1345,10 +1614,20 @@ const VideoCall = ({
       // Modify SDP for better compatibility between devices
       let modifiedSDP = answer.sdp;
       
-      // If answering from mobile to laptop for video call, ensure proper bitrate
-      if (isMobileDevice && !isAudioOnlyCall) {
-        console.log('Modifying SDP for mobile-to-laptop video call');
-        modifiedSDP = modifiedSDP.replace(/(m=video.*\r\n)/g, '$1b=AS:768\r\n');
+      if (isMobileDevice) {
+        console.log('Mobile device detected, optimizing answer SDP');
+        
+        // Reduce bitrates for mobile devices
+        if (!isAudioOnlyCall) {
+          // Much lower video bitrate for mobile
+          modifiedSDP = modifiedSDP.replace(/(m=video.*\r\n)/g, '$1b=AS:200\r\n');
+        }
+        
+        // Lower audio bitrate too
+        modifiedSDP = modifiedSDP.replace(/(m=audio.*\r\n)/g, '$1b=AS:32\r\n');
+      } else if (!isMobileDevice && !isAudioOnlyCall) {
+        // Desktop device with video
+        modifiedSDP = modifiedSDP.replace(/(m=video.*\r\n)/g, '$1b=AS:512\r\n');
       }
       
       // Create a modified answer with the updated SDP
