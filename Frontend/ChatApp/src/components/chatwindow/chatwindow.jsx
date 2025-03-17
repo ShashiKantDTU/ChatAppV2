@@ -162,29 +162,35 @@ const ChatWindow = (props) => {
         }
     }, [props.userdata?.messages?.length]);
 
+    // Add this function at the component level
+    const handleScroll = () => {
+        if (!chatAreaRef.current) return;
+        
+        const chatArea = chatAreaRef.current;
+        
+        // Check if user is near the bottom (within 100px)
+        const isScrolledNearBottom = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop <= 100;
+        
+        // Update the ref for use in other effects
+        isNearBottom.current = isScrolledNearBottom;
+        
+        // Show button when user has scrolled up at least 100px from bottom
+        const isScrolledUp = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop > 100;
+        setShowScrollButton(isScrolledUp);
+        
+        // If user scrolled to bottom, clear the new messages notification
+        if (isScrolledNearBottom) {
+            setHasNewMessages(false);
+            setUnreadCount(0);
+        }
+    };
+
     // Add scroll event listener to detect when user scrolls up
     useEffect(() => {
-        const chatArea = document.getElementById('chatarea');
+        const chatArea = chatAreaRef.current;
         if (!chatArea) return;
 
-        const handleScroll = () => {
-            // Check if user is near the bottom (within 100px)
-            const isScrolledNearBottom = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop <= 100;
-            
-            // Update the ref for use in other effects
-            isNearBottom.current = isScrolledNearBottom;
-            
-            // Show button when user has scrolled up at least 100px from bottom
-            const isScrolledUp = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop > 100;
-            setShowScrollButton(isScrolledUp);
-            
-            // If user scrolled to bottom, clear the new messages notification
-            if (isScrolledNearBottom) {
-                setHasNewMessages(false);
-                setUnreadCount(0);
-            }
-        };
-
+        // Use the handleScroll function defined above
         chatArea.addEventListener('scroll', handleScroll);
         return () => {
             chatArea.removeEventListener('scroll', handleScroll);
