@@ -91,13 +91,30 @@ const VideoCall = ({
   const [pendingIceCandidates, setPendingIceCandidates] = useState([]);
   const remoteSdpSet = useRef(false);
 
-  // After the state variables declarations, add a useEffect that reacts to callType changes
+  // Add a ref to track if call initialization has started to prevent double initialization
+  const callInitializedRef = useRef(false);
+
+  // Add a ref for an audio element specifically for audio-only calls
+  const audioElementRef = useRef(null);
+
+  // After the state variables declarations, modify the useEffect that reacts to callType changes
   useEffect(() => {
-    // Update audio/video states when callType changes
-    setIsAudioOnly(callType === 'audio');
-    setIsVideoEnabled(callType === 'video');
+    // Update audio/video states when callType changes - use a callback to ensure state consistency
+    setIsAudioOnly(prevState => {
+      const newState = callType === 'audio';
+      if (prevState !== newState) {
+        console.log(`Updating isAudioOnly from ${prevState} to ${newState} (callType=${callType})`);
+      }
+      return newState;
+    });
     
-    console.log(`Call type changed to: ${callType}, isAudioOnly: ${callType === 'audio'}`);
+    setIsVideoEnabled(prevState => {
+      const newState = callType === 'video';
+      if (prevState !== newState) {
+        console.log(`Updating isVideoEnabled from ${prevState} to ${newState} (callType=${callType})`);
+      }
+      return newState;
+    });
   }, [callType]);
 
   // Function to set up audio monitoring
@@ -265,10 +282,21 @@ const VideoCall = ({
     };
   }, [isOpen, areIceServersReady, callType]);
   
-  // Initialize local media and start call
+  // Modify the initialize call function to check if already initialized
   const initializeCall = async () => {
     try {
-      console.log(`Initializing call with type: ${callType}, isAudioOnly: ${isAudioOnly}`);
+      // Prevent double initialization
+      if (callInitializedRef.current) {
+        console.log('Call already initialized, skipping duplicate initialization');
+        return;
+      }
+      
+      callInitializedRef.current = true;
+      
+      // Read the current callType directly to ensure we're using the latest value
+      const currentIsAudioOnly = callType === 'audio';
+      
+      console.log(`Initializing call with type: ${callType}, isAudioOnly: ${currentIsAudioOnly}`);
       setIsLoading(true);
       setError(null);
       
@@ -318,14 +346,16 @@ const VideoCall = ({
       }
       
       // Get local media stream based on call type and optimized constraints
-      const currentIsAudioOnly = callType === 'audio'; // Use callType directly to be safe
       console.log(`Setting up media with callType=${callType}, isAudioOnly=${currentIsAudioOnly}`);
 
       const mediaConstraints = {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          // Add these parameters for better audio quality
+          sampleRate: 48000,
+          channelCount: 2
         },
         video: !currentIsAudioOnly ? {
           width: { ideal: idealWidth, max: idealWidth * 1.5 },
@@ -473,20 +503,21 @@ const VideoCall = ({
   const startOutgoingCall = () => {
     if (!socket) return;
     
-    // Add debug logging
-    console.log(`Starting outgoing call: callType=${callType}, isAudioOnly=${isAudioOnly}`);
+    // Use callType directly rather than the potentially stale isAudioOnly state
+    const isAudioOnlyCall = callType === 'audio';
+    
+    console.log(`Starting outgoing call: callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
     
     // Emit call-user event to server
     try {
-      const callTypeToSend = isAudioOnly ? 'audio' : 'video';
-      console.log(`Emitting call-user with callType: ${callTypeToSend}`);
+      console.log(`Emitting call-user with callType: ${isAudioOnlyCall ? 'audio' : 'video'}`);
       
       socket.emit('call-user', {
         callerId: localUser.uid,
         callerName: localUser.username || localUser.name,
         calleeId: callee.uid,
         callerProfilePic: localUser.profilepicture,
-        callType: callTypeToSend
+        callType: isAudioOnlyCall ? 'audio' : 'video'
       });
       
       // Listen for call-accepted event
@@ -630,11 +661,62 @@ const VideoCall = ({
             peerConnectionRef.current.ontrack = (event) => {
               console.log('Remote track received:', event);
               
+              // Debug the incoming track
+              if (event.track) {
+                console.log(`Received track of kind: ${event.track.kind}, enabled: ${event.track.enabled}, muted: ${event.track.muted}`);
+                
+                // Add listeners to track state changes
+                event.track.onmute = () => console.log('Remote track muted');
+                event.track.onunmute = () => console.log('Remote track unmuted');
+                event.track.onended = () => console.log('Remote track ended');
+                
+                // For audio-only calls, also set the audio track to the dedicated audio element
+                if (event.track.kind === 'audio' && isAudioOnly && audioElementRef.current) {
+                  const audioStream = new MediaStream([event.track]);
+                  audioElementRef.current.srcObject = audioStream;
+                  audioElementRef.current.volume = 1.0;
+                  audioElementRef.current.play().catch(err => {
+                    console.error('Error playing audio:', err);
+                  });
+                  
+                  console.log('Set audio track to dedicated audio element for audio-only call');
+                }
+              }
+              
               if (remoteVideoRef.current && event.streams && event.streams[0]) {
+                console.log(`Setting remote stream - has video tracks: ${event.streams[0].getVideoTracks().length > 0}, has audio tracks: ${event.streams[0].getAudioTracks().length > 0}`);
+                
+                // Set the stream to the video element
                 remoteVideoRef.current.srcObject = event.streams[0];
+                
+                // Add explicit volume settings
+                remoteVideoRef.current.volume = 1.0;
+                
+                // Listen for the play event
+                remoteVideoRef.current.onplay = () => {
+                  console.log('Remote video element started playing');
+                };
+                
+                // Add pause listener to detect if playback stops
+                remoteVideoRef.current.onpause = () => {
+                  console.log('Remote video element paused - may indicate issues');
+                };
                 
                 // Set up audio monitoring for the remote stream
                 setupRemoteAudioMonitoring(event.streams[0]);
+                
+                // Additional check for audio tracks after a short delay
+                setTimeout(() => {
+                  const currentStream = remoteVideoRef.current.srcObject;
+                  if (currentStream) {
+                    const audioTracks = currentStream.getAudioTracks();
+                    console.log(`After delay - remote stream has ${audioTracks.length} audio tracks`);
+                    
+                    audioTracks.forEach((track, index) => {
+                      console.log(`Audio track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+                    });
+                  }
+                }, 2000);
               }
             };
           }
@@ -734,6 +816,9 @@ const VideoCall = ({
             setError(null);
             // Connection is stable, reset reconnect attempts
             reconnectAttempts = 0;
+            
+            // Check and fix audio issues after connection is established
+            setTimeout(checkAndFixAudioIssues, 1000);
             
             // Clear any pending reconnection timers
             if (reconnectionTimer) {
@@ -845,11 +930,62 @@ const VideoCall = ({
       peerConnectionRef.current.ontrack = (event) => {
         console.log('Remote track received:', event);
         
+        // Debug the incoming track
+        if (event.track) {
+          console.log(`Received track of kind: ${event.track.kind}, enabled: ${event.track.enabled}, muted: ${event.track.muted}`);
+          
+          // Add listeners to track state changes
+          event.track.onmute = () => console.log('Remote track muted');
+          event.track.onunmute = () => console.log('Remote track unmuted');
+          event.track.onended = () => console.log('Remote track ended');
+          
+          // For audio-only calls, also set the audio track to the dedicated audio element
+          if (event.track.kind === 'audio' && isAudioOnly && audioElementRef.current) {
+            const audioStream = new MediaStream([event.track]);
+            audioElementRef.current.srcObject = audioStream;
+            audioElementRef.current.volume = 1.0;
+            audioElementRef.current.play().catch(err => {
+              console.error('Error playing audio:', err);
+            });
+            
+            console.log('Set audio track to dedicated audio element for audio-only call');
+          }
+        }
+        
         if (remoteVideoRef.current && event.streams && event.streams[0]) {
+          console.log(`Setting remote stream - has video tracks: ${event.streams[0].getVideoTracks().length > 0}, has audio tracks: ${event.streams[0].getAudioTracks().length > 0}`);
+          
+          // Set the stream to the video element
           remoteVideoRef.current.srcObject = event.streams[0];
+          
+          // Add explicit volume settings
+          remoteVideoRef.current.volume = 1.0;
+          
+          // Listen for the play event
+          remoteVideoRef.current.onplay = () => {
+            console.log('Remote video element started playing');
+          };
+          
+          // Add pause listener to detect if playback stops
+          remoteVideoRef.current.onpause = () => {
+            console.log('Remote video element paused - may indicate issues');
+          };
           
           // Set up audio monitoring for the remote stream
           setupRemoteAudioMonitoring(event.streams[0]);
+          
+          // Additional check for audio tracks after a short delay
+          setTimeout(() => {
+            const currentStream = remoteVideoRef.current.srcObject;
+            if (currentStream) {
+              const audioTracks = currentStream.getAudioTracks();
+              console.log(`After delay - remote stream has ${audioTracks.length} audio tracks`);
+              
+              audioTracks.forEach((track, index) => {
+                console.log(`Audio track ${index} - enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+              });
+            }
+          }, 2000);
         }
       };
       
@@ -964,6 +1100,9 @@ const VideoCall = ({
   
   // Clean up media streams and connections
   const cleanupCall = () => {
+    // Reset initialization flag
+    callInitializedRef.current = false;
+    
     // Stop the timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -1192,6 +1331,41 @@ const VideoCall = ({
     };
   }, [socket, isOpen, isIncoming, localUser, callee, pendingIceCandidates]);
 
+  // Add a function to check and fix audio issues
+  const checkAndFixAudioIssues = () => {
+    try {
+      if (!remoteVideoRef.current || !remoteVideoRef.current.srcObject) {
+        console.log("Cannot check audio - no remote stream");
+        return;
+      }
+
+      const audioTracks = remoteVideoRef.current.srcObject.getAudioTracks();
+      console.log(`Checking audio - found ${audioTracks.length} audio tracks`);
+
+      if (audioTracks.length > 0) {
+        audioTracks.forEach(track => {
+          // Make sure tracks are enabled
+          if (!track.enabled) {
+            console.log("Found disabled audio track - enabling");
+            track.enabled = true;
+          }
+        });
+      } else {
+        console.warn("No audio tracks found in remote stream");
+      }
+
+      // Make sure volume is set
+      remoteVideoRef.current.volume = 1.0;
+      
+      // Make sure it's not muted
+      remoteVideoRef.current.muted = false;
+      
+      console.log(`Remote video element - volume: ${remoteVideoRef.current.volume}, muted: ${remoteVideoRef.current.muted}`);
+    } catch (err) {
+      console.error("Error checking audio state:", err);
+    }
+  };
+
   return (
     <div className={`video-call-container ${isOpen ? 'active' : ''}`}>
       <div className="video-call-content">
@@ -1214,6 +1388,15 @@ const VideoCall = ({
         <div className={`video-streams ${isAudioOnly ? 'audio-only' : ''}`}>
           {isAudioOnly ? (
             <div className="audio-only-container">
+              {/* Hidden audio element for audio-only calls */}
+              <audio 
+                ref={audioElementRef}
+                autoPlay
+                playsInline
+                controls={false}
+                style={{ display: 'none' }}
+              />
+              
               <div className="audio-only-avatar">
                 <img 
                   src={isIncoming ? caller.profilepicture : callee.profilepicture} 
@@ -1252,6 +1435,45 @@ const VideoCall = ({
                   {localAudioLevel > 0.05 && (
                     <div className="local-speaking">You are speaking</div>
                   )}
+                  
+                  {/* Debug button for audio issues */}
+                  <button 
+                    className="debug-audio-button"
+                    onClick={() => {
+                      checkAndFixAudioIssues();
+                      
+                      // Additional debugging for audio element
+                      if (audioElementRef.current) {
+                        console.log('Audio element state:', {
+                          volume: audioElementRef.current.volume,
+                          muted: audioElementRef.current.muted,
+                          paused: audioElementRef.current.paused,
+                          hasStream: !!audioElementRef.current.srcObject,
+                          streamActive: audioElementRef.current.srcObject ? 
+                            audioElementRef.current.srcObject.active : false,
+                          audioTracks: audioElementRef.current.srcObject ?
+                            audioElementRef.current.srcObject.getAudioTracks().length : 0
+                        });
+                        
+                        // Try to restart playback
+                        audioElementRef.current.play().catch(err => {
+                          console.error('Error trying to restart audio playback:', err);
+                        });
+                      }
+                    }}
+                    style={{
+                      marginTop: '10px',
+                      padding: '4px 8px',
+                      borderRadius: '4px', 
+                      background: '#444',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    Debug Audio
+                  </button>
                 </div>
               )}
               
