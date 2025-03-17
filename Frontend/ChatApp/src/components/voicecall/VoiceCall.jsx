@@ -228,12 +228,48 @@ const VoiceCall = ({
                     console.log('WebRTC connection established successfully');
                     setCallStatus('ongoing');
                     startTimer();
-                } else if (state === 'failed' || state === 'disconnected' || state === 'closed') {
-                    console.log(`WebRTC connection ${state}`);
-                    if (state === 'failed') {
-                        setError('Connection failed. Please ensure both devices have good network connectivity.');
+                } else if (state === 'connecting') {
+                    console.log('WebRTC connection in progress...');
+                    // The connecting state is normal, no action needed
+                } else if (state === 'disconnected') {
+                    console.log('WebRTC connection disconnected, may reconnect automatically');
+                    setCallStatus('reconnecting');
+                    // WebRTC might reconnect automatically, so wait before taking action
+                } else if (state === 'failed') {
+                    console.log('WebRTC connection failed');
+                    setError('Connection failed. Please ensure both devices have good network connectivity.');
+                    
+                    // If we're in an ongoing call that failed, try to reconnect
+                    // otherwise just clean up
+                    if (callStatus === 'ongoing' || callStatus === 'reconnecting') {
+                        setCallStatus('reconnecting');
+                        
+                        // Try to restart ICE if possible
+                        try {
+                            if (peerConnection.restartIce) {
+                                console.log('Attempting to restart ICE connection');
+                                peerConnection.restartIce();
+                            }
+                        } catch (err) {
+                            console.error('Error trying to restart ICE:', err);
+                        }
+                        
+                        // After 30 seconds, if still failing, clean up
+                        setTimeout(() => {
+                            if (peerConnectionRef.current && 
+                                (peerConnectionRef.current.connectionState === 'failed' || 
+                                 peerConnectionRef.current.connectionState === 'disconnected')) {
+                                console.log('Connection could not be re-established after timeout');
+                                setError('Call connection could not be re-established.');
+                                cleanup();
+                            }
+                        }, 30000); // 30 seconds timeout
+                    } else {
                         cleanup();
                     }
+                } else if (state === 'closed') {
+                    console.log('WebRTC connection closed');
+                    cleanup();
                 }
             };
             
@@ -250,16 +286,24 @@ const VoiceCall = ({
             // Handle ICE candidates
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate && socket && remoteUser?.uid) {
-                    console.log('Generated ICE candidate', event.candidate);
-                    
-                    // Make sure we're sending the full candidate information
-                    socket.emit('ice-candidate', {
-                        candidate: event.candidate,
-                        to: remoteUser.uid,
-                        from: localUser.uid
-                    });
+                    try {
+                        console.log('Generated ICE candidate', event.candidate);
+                        
+                        // Make sure we're sending the full candidate information
+                        socket.emit('ice-candidate', {
+                            candidate: event.candidate,
+                            to: remoteUser.uid,
+                            from: localUser.uid
+                        });
+                    } catch (error) {
+                        console.error('Error sending ICE candidate:', error);
+                    }
                 } else if (!event.candidate) {
                     console.log('ICE candidate gathering complete');
+                } else if (!remoteUser?.uid) {
+                    console.error('Cannot send ICE candidate: remote user ID not available');
+                } else if (!socket) {
+                    console.error('Cannot send ICE candidate: socket not available');
                 }
             };
 
@@ -553,14 +597,14 @@ const VoiceCall = ({
         // Handle remote ICE candidates
         const handleIceCandidate = async ({ candidate, from }) => {
             try {
-                // Ignore ICE candidates from ourselves
-                if (from === localUser.uid) {
+                // Only ignore ICE candidates if we can positively identify them as our own
+                if (from && from === localUser.uid) {
                     console.log('Ignoring ICE candidate from self');
                     return;
                 }
                 
                 if (peerConnectionRef.current && candidate) {
-                    console.log('Received ICE candidate from:', from);
+                    console.log('Processing ICE candidate', from ? `from: ${from}` : '(sender unknown)');
                     
                     if (peerConnectionRef.current.remoteDescription === null) {
                         // Queue the candidate if remote description not set yet
