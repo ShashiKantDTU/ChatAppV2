@@ -236,7 +236,7 @@ const VoiceCall = ({
             
             // Handle ICE candidates
             peerConnection.onicecandidate = (event) => {
-                if (event.candidate && socket) {
+                if (event.candidate && socket && remoteUser?.uid) {
                     console.log('Generated ICE candidate', event.candidate);
                     
                     // Make sure we're sending the full candidate information
@@ -401,7 +401,7 @@ const VoiceCall = ({
         console.log('User ended call');
         
         // Notify the remote user that the call has ended
-        if (socket && remoteUser) {
+        if (socket && remoteUser?.uid) {
             console.log('Sending call-ended event to:', remoteUser.uid);
             socket.emit('call-ended', {
                 to: remoteUser.uid
@@ -625,7 +625,12 @@ const VoiceCall = ({
     // Create and send an offer for an outgoing call
     const makeCall = async () => {
         try {
-            console.log('Initiating outgoing call to:', remoteUser.username);
+            console.log('Initiating outgoing call to:', remoteUser?.username || 'User');
+            
+            // Check if remoteUser is available
+            if (!remoteUser?.uid) {
+                throw new Error('Remote user not available for call');
+            }
             
             await initializeCall(true);
             
@@ -724,11 +729,11 @@ const VoiceCall = ({
                             <img src={remoteUser.profilePicture} alt={remoteUser.username} />
                         ) : (
                             <div className={styles.defaultAvatar}>
-                                {remoteUser.username.charAt(0).toUpperCase()}
+                                {remoteUser.username ? remoteUser.username.charAt(0).toUpperCase() : '?'}
                             </div>
                         )}
                     </div>
-                    <div className={styles.username}>{remoteUser.username}</div>
+                    <div className={styles.username}>{remoteUser.username || 'User'}</div>
                 </div>
                 
                 {/* Hidden audio elements for streams */}
@@ -740,9 +745,9 @@ const VoiceCall = ({
                         <>
                             <div className={styles.callDetails}>
                                 {callType === 'incoming' ? (
-                                    <span>Incoming call from {remoteUser.username}</span>
+                                    <span>Incoming call from {remoteUser?.username || 'User'}</span>
                                 ) : (
-                                    <span>Call {remoteUser.username}</span>
+                                    <span>Call {remoteUser?.username || 'User'}</span>
                                 )}
                             </div>
                             <div className={styles.buttons}>
@@ -776,7 +781,7 @@ const VoiceCall = ({
                     {callStatus === 'calling' && (
                         <>
                             <div className={styles.callDetails}>
-                                <span>Calling {remoteUser.username}...</span>
+                                <span>Calling {remoteUser?.username || 'User'}...</span>
                             </div>
                             <div className={styles.buttons}>
                                 <button 
@@ -792,7 +797,7 @@ const VoiceCall = ({
                     {callStatus === 'incoming' && (
                         <>
                             <div className={styles.callDetails}>
-                                <span>Incoming call from {remoteUser.username}</span>
+                                <span>Incoming call from {remoteUser?.username || 'User'}</span>
                             </div>
                             <div className={styles.buttons}>
                                 <button 
@@ -830,7 +835,7 @@ const VoiceCall = ({
                     {callStatus === 'ongoing' && (
                         <>
                             <div className={styles.callDetails}>
-                                <span>In call with {remoteUser.username}</span>
+                                <span>In call with {remoteUser?.username || 'User'}</span>
                                 <span className={styles.duration}>{formatDuration(callDuration)}</span>
                             </div>
                             <div className={styles.buttons}>
