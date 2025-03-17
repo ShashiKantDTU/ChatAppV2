@@ -1395,26 +1395,42 @@ const VideoCall = ({
   
   // Handle rejection/ending call
   const handleEndCall = () => {
+    console.log('Ending call and notifying remote peer');
+    
     // Clear the call timeout if it exists
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
       callTimeoutRef.current = null;
     }
     
+    // Before cleanup, send call-ended event to notify the other user
     if (socket) {
-      // Notify the other user that call is ended
-      socket.emit('call-ended', {
-        callerId: isIncoming ? caller.uid : localUser.uid,
-        calleeId: isIncoming ? localUser.uid : callee.uid
-      });
+      try {
+        socket.emit('call-ended', {
+          callerId: isIncoming ? caller.uid : localUser.uid,
+          calleeId: isIncoming ? localUser.uid : callee.uid
+        });
+        
+        // Give a small delay to let the message go through before cleanup
+        setTimeout(() => {
+          cleanupCall();
+          onClose();
+        }, 100);
+      } catch (socketError) {
+        console.error('Error sending call-ended event:', socketError);
+        cleanupCall();
+        onClose();
+      }
+    } else {
+      cleanupCall();
+      onClose();
     }
-    
-    cleanupCall();
-    onClose();
   };
   
   // Clean up media streams and connections
   const cleanupCall = () => {
+    console.log('Cleaning up call resources and resetting states');
+    
     // Reset initialization flag
     callInitializedRef.current = false;
     
@@ -1427,18 +1443,65 @@ const VideoCall = ({
     // Stop the timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
+      timerRef.current = null;
     }
+    
+    // Reset media states
+    setIsCallActive(false);
+    setIsLoading(false);
+    setError(null);
+    setIsMuted(false);
+    setIsVideoEnabled(callType === 'video'); // Reset to original value based on callType
+    setIsAudioOnly(callType === 'audio'); // Reset to original value based on callType
+    setCallDuration(0);
+    
+    // Remove any socket event listeners for specific call events
+    if (socket) {
+      // Not removing the main socket listeners managed by useEffect hooks
+      // But we can explicitly remove one-time listeners if needed
+      socket.off('call-accepted');
+      socket.off('call-offer');
+      socket.off('call-answer');
+      socket.off('call-ended');
+    }
+    
+    // Reset SDP state
+    remoteSdpSet.current = false;
+    
+    // Clear pending ICE candidates
+    setPendingIceCandidates([]);
     
     // Close the peer connection
     if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
+      try {
+        // First close all tracks to ensure proper cleanup
+        const senders = peerConnectionRef.current.getSenders();
+        senders.forEach(sender => {
+          if (sender.track) {
+            sender.track.stop();
+          }
+        });
+        
+        // Then close the connection
+        peerConnectionRef.current.close();
+      } catch (err) {
+        console.error('Error closing peer connection:', err);
+      } finally {
+        peerConnectionRef.current = null;
+      }
     }
     
     // Stop all tracks in the local stream
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
+      try {
+        localStreamRef.current.getTracks().forEach(track => {
+          track.stop();
+        });
+      } catch (err) {
+        console.error('Error stopping local tracks:', err);
+      } finally {
+        localStreamRef.current = null;
+      }
     }
     
     // Reset video elements
@@ -1449,6 +1512,29 @@ const VideoCall = ({
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
     }
+    
+    // Reset audio element for audio-only calls
+    if (audioElementRef.current) {
+      audioElementRef.current.srcObject = null;
+      audioElementRef.current.pause();
+    }
+    
+    // Close any audio contexts
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch (err) {
+        console.error('Error closing audio context:', err);
+      }
+    }
+    
+    // Stop audio monitoring
+    if (audioMonitoringIntervalRef.current) {
+      clearInterval(audioMonitoringIntervalRef.current);
+      audioMonitoringIntervalRef.current = null;
+    }
+    
+    console.log('Call cleanup completed');
   };
   
   // Toggle microphone
@@ -2092,6 +2178,62 @@ const VideoCall = ({
       }
     }
   };
+
+  // Add this useEffect to reset state when the component opens/closes (minimal changes)
+  useEffect(() => {
+    // When the component opens, reset important states
+    if (isOpen) {
+      console.log('VideoCall component opened - resetting states');
+      callInitializedRef.current = false;
+      remoteSdpSet.current = false;
+      setPendingIceCandidates([]);
+    }
+    
+    // Full cleanup when component closes
+    return () => {
+      if (!isOpen) {
+        console.log('VideoCall component closed - full cleanup');
+        cleanupCall();
+      }
+    };
+  }, [isOpen]);
+
+  // Add a useEffect to listen for call-ended events from the remote peer
+  useEffect(() => {
+    if (!socket || !isOpen) return;
+    
+    // Handler for call-ended event from the remote peer
+    const handleRemoteCallEnded = (data) => {
+      console.log('Remote peer ended call:', data);
+      
+      // Check if this event is for our call
+      const isForUs = (isIncoming && 
+                       data.callerId === caller.uid && 
+                       data.calleeId === localUser.uid) ||
+                      (!isIncoming && 
+                       data.callerId === localUser.uid && 
+                       data.calleeId === callee.uid);
+      
+      if (isForUs) {
+        console.log('Call ended by remote peer, cleaning up resources');
+        setError('Call ended by the other user');
+        
+        // Short delay to show the message before closing
+        setTimeout(() => {
+          cleanupCall();
+          onClose();
+        }, 1500);
+      }
+    };
+    
+    // Listen for call-ended events
+    socket.on('call-ended', handleRemoteCallEnded);
+    
+    return () => {
+      // Remove listener when component unmounts or isOpen changes
+      socket.off('call-ended', handleRemoteCallEnded);
+    };
+  }, [socket, isOpen, isIncoming, caller, callee, localUser]);
 
   return (
     <div className={`video-call-container ${isOpen ? 'active' : ''}`}>
