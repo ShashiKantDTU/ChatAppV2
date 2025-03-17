@@ -38,6 +38,7 @@ function ChatApp() {
     const [callType, setCallType] = useState('video');
     const navigate = useNavigate();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const [callMinimized, setCallMinimized] = useState(false);
 
     // Function to handle window resize
     const handleResize = useCallback(() => {
@@ -938,6 +939,10 @@ function ChatApp() {
             callerId: callInfo.callerId,
             calleeId: user.uid
         });
+
+        // Auto-minimize the call window after accepting
+        // This state will be passed to the VideoCall component
+        setCallMinimized(true);
     };
     
     // Handle rejecting a call globally
@@ -957,6 +962,8 @@ function ChatApp() {
     const handleGlobalEndCall = () => {
         setShowGlobalCallUI(false);
         setCallInfo(null);
+        // Reset call minimized state when call ends
+        setCallMinimized(false);
     };
 
     // Function to get caller user data
@@ -975,6 +982,11 @@ function ChatApp() {
             };
         }
     }, [fetchUser]);
+
+    // Handle call minimization toggling
+    const handleCallMinimizeToggle = (isMinimized) => {
+        setCallMinimized(isMinimized);
+    };
 
     return (
       <div className={`${styles.container} ${isDarkMode ? styles.darkTheme : styles.lightTheme}`}>
@@ -1220,6 +1232,8 @@ function ChatApp() {
                   socket={socket}
                   localUser={user}
                   callType={callType}
+                  initialMinimized={callMinimized}
+                  onMinimizeChange={handleCallMinimizeToggle}
               />
           )}
         </main>

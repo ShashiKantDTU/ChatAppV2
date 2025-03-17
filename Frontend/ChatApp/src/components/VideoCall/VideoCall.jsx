@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, X, RefreshCw } from 'lucide-react';
+import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, X, RefreshCw, Minimize, Maximize } from 'lucide-react';
 import './VideoCall.css';
 
 // Ringtone URL
@@ -49,7 +49,9 @@ const VideoCall = ({
   onReject, 
   socket, 
   localUser,
-  callType = 'video' // 'video' or 'audio'
+  callType = 'video', // 'video' or 'audio'
+  initialMinimized = false, // New prop to control initial minimized state
+  onMinimizeChange = null // Callback when minimized state changes
 }) => {
   // Call states
   const [isCallActive, setIsCallActive] = useState(false);
@@ -103,6 +105,14 @@ const VideoCall = ({
 
   // Add a new ref for call timeout
   const callTimeoutRef = useRef(null);
+
+  // Replace the simple isMinimized state with one that uses initialMinimized
+  const [isMinimized, setIsMinimized] = useState(initialMinimized);
+  
+  // Update isMinimized when initialMinimized changes
+  useEffect(() => {
+    setIsMinimized(initialMinimized);
+  }, [initialMinimized]);
 
   // After the state variables declarations, modify the useEffect that reacts to callType changes
   useEffect(() => {
@@ -2235,13 +2245,39 @@ const VideoCall = ({
     };
   }, [socket, isOpen, isIncoming, caller, callee, localUser]);
 
+  // Toggle minimized/maximized state
+  const toggleMinimized = () => {
+    const newValue = !isMinimized;
+    setIsMinimized(newValue);
+    
+    // Call the onMinimizeChange callback if provided
+    if (onMinimizeChange) {
+      onMinimizeChange(newValue);
+    }
+  };
+
+  // Determine the appropriate container class based on call state
+  const getContainerClassName = () => {
+    const baseClass = `video-call-container ${isOpen ? 'active' : ''}`;
+    
+    if (isMinimized) {
+      return `${baseClass} minimized`;
+    }
+    
+    if (!isCallActive && isIncoming) {
+      return `${baseClass} ringing`;
+    }
+    
+    return baseClass;
+  };
+
   return (
-    <div className={`video-call-container ${isOpen ? 'active' : ''}`}>
+    <div className={getContainerClassName()}>
       <div className="video-call-content">
         <div className="video-call-header">
           <h3>
             {isCallActive
-              ? `${isAudioOnly ? 'Voice' : 'Video'} Call in progress`
+              ? `${isAudioOnly ? 'Voice' : 'Video'} Call`
               : isIncoming
                 ? `Incoming ${isAudioOnly ? 'Voice' : 'Video'} Call`
                 : `${isAudioOnly ? 'Calling' : 'Video Calling'}...`}
@@ -2249,9 +2285,18 @@ const VideoCall = ({
           <span className="call-duration">
             {isCallActive && formatDuration(callDuration)}
           </span>
-          <button className="close-button" onClick={handleEndCall}>
-            <X size={24} />
-          </button>
+          <div className="call-header-controls">
+            <button 
+              className="minimize-button" 
+              onClick={toggleMinimized}
+              title={isMinimized ? "Maximize" : "Minimize"}
+            >
+              {isMinimized ? <Maximize size={isMinimized ? 14 : 18} /> : <Minimize size={18} />}
+            </button>
+            <button className="close-button" onClick={handleEndCall}>
+              <X size={isMinimized ? 14 : 18} />
+            </button>
+          </div>
         </div>
         
         <div className={`video-streams ${isAudioOnly ? 'audio-only' : ''}`}>
@@ -2305,97 +2350,88 @@ const VideoCall = ({
                     <div className="local-speaking">You are speaking</div>
                   )}
                   
-                  {/* Debug button for audio issues */}
-                  <button 
-                    className="debug-audio-button"
-                    onClick={() => {
-                      const diagMessage = runAudioDiagnostics();
-                      
-                      // Try alternative playback method
-                      const audioCtx = forcePeerConnectionAudio();
-                      
-                      // Show diagnostic results to user
-                      setError(diagMessage + (audioCtx ? ' Forced audio connection active.' : ''));
-                      
-                      // Clear the error message after 3 seconds
-                      setTimeout(() => {
-                        setError(null);
-                      }, 3000);
-                      
-                      // Also try the regular audio fix
-                      checkAndFixAudioIssues();
-                    }}
-                    style={{
-                      marginTop: '10px',
-                      padding: '8px 12px',
-                      borderRadius: '4px', 
-                      background: '#555',
-                      color: 'white',
-                      border: '1px solid #888',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: 'bold',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                      display: 'block',
-                      margin: '10px auto'
-                    }}
-                  >
-                    Fix Audio Issues
-                  </button>
+                  {/* Don't show debug button in minimized mode */}
+                  {!isMinimized && (
+                    <button 
+                      className="debug-audio-button"
+                      onClick={() => {
+                        const diagMessage = runAudioDiagnostics();
+                        
+                        // Try alternative playback method
+                        const audioCtx = forcePeerConnectionAudio();
+                        
+                        // Show diagnostic results to user
+                        setError(diagMessage + (audioCtx ? ' Forced audio connection active.' : ''));
+                        
+                        // Clear the error message after 3 seconds
+                        setTimeout(() => {
+                          setError(null);
+                        }, 3000);
+                        
+                        // Also try the regular audio fix
+                        checkAndFixAudioIssues();
+                      }}
+                    >
+                      Fix Audio Issues
+                    </button>
+                  )}
                 </div>
               )}
               
+              {/* Error message */}
+              {error && <div className="error-message">{error}</div>}
+              
+              {/* Loading indicator */}
               {isLoading && (
                 <div className="loading-indicator">
                   <div className="spinner"></div>
-                  <p>Connecting...</p>
-                </div>
-              )}
-              {error && (
-                <div className="error-message">
-                  <p>{error}</p>
+                  <p>Initializing call...</p>
                 </div>
               )}
             </div>
           ) : (
             <>
+              {/* Remote video */}
               <div className="remote-video-container">
-                {isLoading ? (
-                  <div className="loading-indicator">
-                    <div className="spinner"></div>
-                    <p>Connecting...</p>
-                  </div>
-                ) : error ? (
-                  <div className="error-message">
-                    <p>{error}</p>
-                  </div>
-                ) : (
-                  <video
+                {remoteStream ? (
+                  <video 
                     ref={remoteVideoRef}
+                    className="remote-video"
                     autoPlay
                     playsInline
-                    className="remote-video"
                   />
+                ) : (
+                  <div className="loading-indicator">
+                    {isLoading ? (
+                      <>
+                        <div className="spinner"></div>
+                        <p>Connecting...</p>
+                      </>
+                    ) : (
+                      error ? <div className="error-message">{error}</div> : <p>Waiting for video...</p>
+                    )}
+                  </div>
                 )}
               </div>
               
+              {/* Local video */}
               <div className="local-video-container">
-                <video
+                <video 
                   ref={localVideoRef}
+                  className="local-video"
                   autoPlay
                   playsInline
                   muted
-                  className="local-video"
                 />
                 
-                {isCameraSupported && isCallActive && !isAudioOnly && (
-                  <button 
+                {/* Only show camera switch button on mobile and if not minimized */}
+                {hasCameraSwitch && !isMinimized && (
+                  <button
                     className={`camera-switch-button ${isSwitchingCamera ? 'switching' : ''}`}
                     onClick={switchCamera}
                     disabled={isSwitchingCamera}
-                    title="Switch Camera"
                   >
-                    <RefreshCw size={20} />
+                    <RefreshCw size={isMinimized ? 14 : 18} />
                   </button>
                 )}
               </div>
@@ -2441,14 +2477,14 @@ const VideoCall = ({
                   onClose();
                 }}
               >
-                <PhoneOff size={24} />
+                <PhoneOff size={isMinimized ? 18 : 24} />
                 <span>Decline</span>
               </button>
               <button 
                 className="call-control-button accept" 
                 onClick={handleAcceptCall}
               >
-                <Phone size={24} />
+                <Phone size={isMinimized ? 18 : 24} />
                 <span>Accept</span>
               </button>
             </>
@@ -2458,7 +2494,7 @@ const VideoCall = ({
                 className={`call-control-button ${isMuted ? 'disabled' : ''}`}
                 onClick={toggleMute}
               >
-                {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+                {isMuted ? <MicOff size={isMinimized ? 18 : 24} /> : <Mic size={isMinimized ? 18 : 24} />}
                 <span>{isMuted ? 'Unmute' : 'Mute'}</span>
               </button>
               
@@ -2466,7 +2502,7 @@ const VideoCall = ({
                 className="call-control-button end-call"
                 onClick={handleEndCall}
               >
-                <PhoneOff size={24} />
+                <PhoneOff size={isMinimized ? 18 : 24} />
                 <span>End</span>
               </button>
               
@@ -2475,7 +2511,7 @@ const VideoCall = ({
                   className={`call-control-button ${!isVideoEnabled ? 'disabled' : ''}`}
                   onClick={toggleVideo}
                 >
-                  {isVideoEnabled ? <Video size={24} /> : <VideoOff size={24} />}
+                  {isVideoEnabled ? <Video size={isMinimized ? 18 : 24} /> : <VideoOff size={isMinimized ? 18 : 24} />}
                   <span>{isVideoEnabled ? 'Hide Video' : 'Show Video'}</span>
                 </button>
               )}
