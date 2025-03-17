@@ -31,6 +31,7 @@ function ChatApp() {
         return savedTheme ? savedTheme === 'dark' : true;
     });
     const navigate = useNavigate();
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
     // Function to handle window resize
     const handleResize = useCallback(() => {
@@ -906,13 +907,39 @@ function ChatApp() {
             </button>
           </div>
 
-          <div className={styles.userProfile}>
-            <img 
-              src={user?.profilepicture || "/default-avatar.png"} 
-              alt="Profile" 
-              className={styles.profilePic} 
-            />
+          <div className={styles.logoutButtonWrapper}>
+            <button 
+              className={styles.logoutButton}
+              onClick={() => setShowLogoutConfirm(true)}
+              title="Logout"
+            >
+              <LogOut size={24} />
+              <span className={styles.buttonLabel}>Logout</span>
+            </button>
           </div>
+
+          {showLogoutConfirm && (
+            <div className={styles.confirmOverlay}>
+              <div className={styles.confirmDialog}>
+                <h3>Confirm Logout</h3>
+                <p>Are you sure you want to logout?</p>
+                <div className={styles.confirmButtons}>
+                  <button 
+                    className={styles.cancelButton}
+                    onClick={() => setShowLogoutConfirm(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className={styles.confirmButton}
+                    onClick={handleLogout}
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </nav>
 
         <main className={styles.mainContent}>
@@ -1003,16 +1030,6 @@ function ChatApp() {
                     <span>Privacy & Security</span>
                   </div>
                   <span className={styles.settingsValue}>Manage</span>
-                </button>
-                
-                <button 
-                  className={`${styles.settingsItem} ${styles.logoutButton}`}
-                  onClick={handleLogout}
-                >
-                  <div className={styles.settingsLabel}>
-                    <LogOut size={20} className={styles.settingsIcon} />
-                    <span>Logout</span>
-                  </div>
                 </button>
               </div>
             </div>

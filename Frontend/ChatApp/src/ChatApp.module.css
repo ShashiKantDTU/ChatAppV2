@@ -888,3 +888,123 @@
     border-top: 2px solid var(--accent-primary);
   }
 }
+
+/* Logout Button Styles */
+.logoutButtonWrapper {
+  margin-top: auto;
+  padding: 1rem;
+  width: 100%;
+}
+
+.logoutButton {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.75rem;
+  background: linear-gradient(135deg, 
+    rgba(var(--accent-primary-rgb), 0.1),
+    rgba(var(--accent-primary-rgb), 0.05)
+  );
+  border: 1px solid rgba(var(--border-color-rgb), 0.1);
+  border-radius: 10px;
+  color: var(--accent-primary);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.logoutButton:hover {
+  background: linear-gradient(135deg, 
+    rgba(var(--accent-primary-rgb), 0.15),
+    rgba(var(--accent-primary-rgb), 0.1)
+  );
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+}
+
+.logoutButton svg {
+  margin-right: 0.5rem;
+}
+
+/* Logout Confirmation Dialog */
+.confirmOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.confirmDialog {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 350px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.2s ease;
+  border: 1px solid var(--border-color);
+}
+
+.confirmDialog h3 {
+  margin-top: 0;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+}
+
+.confirmDialog p {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.confirmButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.cancelButton, .confirmButton {
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancelButton {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.cancelButton:hover {
+  background: var(--bg-tertiary);
+}
+
+.confirmButton {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+}
+
+.confirmButton:hover {
+  background: var(--accent-secondary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
