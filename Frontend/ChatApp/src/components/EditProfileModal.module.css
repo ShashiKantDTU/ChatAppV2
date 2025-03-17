@@ -76,7 +76,7 @@
 .avatar {
   width: 100%;
   height: 100%;
-  border-radius: 24px;
+  border-radius: 50%;
   object-fit: cover;
   border: 3px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
@@ -110,6 +110,91 @@
   font-size: 0.875rem;
   color: var(--text-secondary);
   margin: 0;
+}
+
+.previewInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  width: 100%;
+  text-align: center;
+}
+
+.cropButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.4rem 0.8rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cropButton:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.cropContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.cropContainer h3 {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+  text-align: center;
+}
+
+.cropArea {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.cropImage {
+  max-width: 100%;
+  max-height: 350px;
+  object-fit: contain;
+}
+
+.cropControls {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.confirmButton {
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  border: none;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.confirmButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .inputGroup {

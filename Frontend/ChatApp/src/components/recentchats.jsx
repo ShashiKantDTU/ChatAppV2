@@ -108,24 +108,50 @@ const RecentChats = (props) => {
 
   const handleEditProfile = async (formData) => {
     setIsUpdating(true);
-    console.log('formData' , formData)
+    console.log('Updating profile with FormData');
+    
     try {
+      // Check if formData is already a FormData object
+      let dataToSend;
+      if (formData instanceof FormData) {
+        dataToSend = formData;
+        console.log('Using provided FormData for profile update');
+      } else {
+        // If it's a plain object, convert to FormData
+        dataToSend = new FormData();
+        for (const key in formData) {
+          dataToSend.append(key, formData[key]);
+        }
+        console.log('Converted object to FormData for profile update');
+      }
+
+      // Determine which endpoint to use based on whether there's a file
+      const hasProfileImage = dataToSend.has('profileImage') && dataToSend.get('profileImage') instanceof File;
+      
+      console.log('Has profile image:', hasProfileImage);
+      
       // Call the API endpoint to update profile
-      const response = await fetch('http://localhost:3000/update-profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(formData)
+      const endpoint = hasProfileImage 
+        ? 'http://localhost:3000/update-profile-image' 
+        : 'http://localhost:3000/update-profile';
         
+      console.log('Using endpoint:', endpoint);
+
+      const response = await fetch(endpoint, {
+        method: 'PUT',
+        // Don't set Content-Type header when sending FormData
+        // The browser will automatically set it with the correct boundary
+        credentials: 'include',
+        body: dataToSend
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update profile');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update profile');
       }
 
       const data = await response.json();
+      console.log('Profile updated successfully:', data);
 
       // Update local state
       setUser(prev => ({
@@ -140,7 +166,7 @@ const RecentChats = (props) => {
 
     } catch (error) {
       console.error('Error updating profile:', error);
-      throw new Error('Failed to update profile');
+      throw error;
     } finally {
       setIsUpdating(false);
     }

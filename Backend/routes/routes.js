@@ -7,6 +7,9 @@ const passport = require('passport')
 const jwt = require('jsonwebtoken')
 const User = require('../models/userschema')
 const nanoid = require('nanoid')
+const multer = require('multer')
+const cloudinary = require('cloudinary').v2
+const { CloudinaryStorage } = require('multer-storage-cloudinary')
 
 const {register , login, verifyJWT , logout} = require('../controllers/userController')
 
@@ -207,18 +210,21 @@ router.get('/me', verifyJWT, (req, res) => {
 // Update user profile
 router.put('/update-profile', verifyJWT, async (req, res) => {
     try {
-        console.log('req.body', req.body)
-        const { username, profilepicture } = req.body;
+        console.log('Updating profile with data:', req.body);
+        const { username } = req.body;
         const userId = req.user.uid;
 
+        // Find the user by UID
         const user = await User.findOne({ uid: userId });
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Update fields if provided
+        // Update username if provided
         if (username) user.username = username;
-        if (profilepicture) user.profilepicture = profilepicture;
+
+        // Handle file upload separately in a dedicated endpoint
+        // This will be handled by a new route
 
         await user.save();
 
@@ -231,7 +237,104 @@ router.put('/update-profile', verifyJWT, async (req, res) => {
         });
     } catch (error) {
         console.error('Error updating profile:', error);
-        res.status(500).json({ message: 'Failed to update profile' });
+        res.status(500).json({ message: 'Failed to update profile', error: error.message });
+    }
+});
+
+// Add a new route for profile image upload
+const profileStorage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'profile_pictures',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+        transformation: [
+            { width: 400, height: 400, crop: 'limit' },
+            { quality: 'auto' }
+        ]
+    }
+});
+
+const profileUpload = multer({
+    storage: profileStorage,
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB limit for profile pictures
+    },
+    fileFilter: function (req, file, cb) {
+        // Accept only images
+        if (!file.mimetype.startsWith('image/')) {
+            return cb(new Error('Only image files are allowed!'), false);
+        }
+        cb(null, true);
+    }
+});
+
+// Update profile with image upload
+router.put('/update-profile-image', verifyJWT, (req, res, next) => {
+    // Check Content-Type for multipart/form-data
+    const contentType = req.headers['content-type'] || '';
+    if (!contentType.includes('multipart/form-data')) {
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid Content-Type. Expected multipart/form-data but received: ' + contentType,
+            help: 'Make sure your frontend is using FormData for file uploads'
+        });
+    }
+    next();
+}, profileUpload.single('profileImage'), async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const { username } = req.body;
+
+        console.log('Updating profile with image. File:', req.file);
+        console.log('Form data:', req.body);
+
+        // Find the user
+        const user = await User.findOne({ uid: userId });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Update username if provided
+        if (username) {
+            user.username = username;
+        }
+
+        // Update profile picture if a file was uploaded
+        if (req.file && req.file.path) {
+            // Delete the old profile picture from Cloudinary if it exists
+            // Extract public_id from the existing profile picture URL
+            if (user.profilepicture && user.profilepicture.includes('cloudinary')) {
+                try {
+                    const urlParts = user.profilepicture.split('/');
+                    const filenameWithExt = urlParts[urlParts.length - 1];
+                    const publicId = filenameWithExt.split('.')[0];
+                    
+                    if (publicId) {
+                        console.log('Attempting to delete old profile image:', publicId);
+                        await cloudinary.uploader.destroy(`profile_pictures/${publicId}`);
+                    }
+                } catch (deleteError) {
+                    console.error('Error deleting old profile image:', deleteError);
+                    // Continue with the update even if deletion fails
+                }
+            }
+
+            // Set the new profile picture URL
+            user.profilepicture = req.file.path;
+        }
+
+        await user.save();
+
+        res.json({
+            message: 'Profile updated successfully',
+            user: {
+                username: user.username,
+                profilepicture: user.profilepicture
+            }
+        });
+    } catch (error) {
+        console.error('Error updating profile with image:', error);
+        res.status(500).json({ message: 'Failed to update profile', error: error.message });
     }
 });
 
