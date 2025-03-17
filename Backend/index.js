@@ -847,14 +847,29 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('end-call', async ({ to }) => {
+    // Change event name from 'end-call' to 'call-ended' for consistency with frontend
+    socket.on('call-ended', async ({ to }) => {
         try {
             const user = await User.findOne({ uid: to });
             if (user && user.socketid) {
                 io.to(user.socketid).emit('call-ended');
             }
         } catch (error) {
-            console.error('Error in end-call handler:', error);
+            console.error('Error in call-ended handler:', error);
+        }
+    });
+
+    // Add handler for call-rejected event
+    socket.on('call-rejected', async ({ to }) => {
+        try {
+            const user = await User.findOne({ uid: to });
+            if (user && user.socketid) {
+                io.to(user.socketid).emit('call-rejected', {
+                    message: 'Call was rejected'
+                });
+            }
+        } catch (error) {
+            console.error('Error in call-rejected handler:', error);
         }
     });
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import styles from './VoiceCall.module.css';
-import { Mic, MicOff, PhoneOff, PhoneCallIcon } from 'lucide-react';
+import { FiPhoneCall as PhoneCallIcon, FiPhoneOff as PhoneOffIcon, FiMic as MicIcon, FiMicOff as MicOffIcon } from 'react-icons/fi';
 
 const VoiceCall = ({ 
     isOpen, 
@@ -11,16 +11,22 @@ const VoiceCall = ({
     callType = 'outgoing', // 'outgoing' or 'incoming'
     initialOffer = null // Add initialOffer prop
 }) => {
-    const [isMuted, setIsMuted] = useState(false);
-    const [callStatus, setCallStatus] = useState(callType === 'incoming' ? 'incoming' : 'connecting');
+    const [callStatus, setCallStatus] = useState(callType === 'incoming' ? 'incoming' : 'idle');
     const [callDuration, setCallDuration] = useState(0);
-    const [error, setError] = useState(null);
-    const [storedOffer, setStoredOffer] = useState(initialOffer); // Initialize with initialOffer
+    const [isMuted, setIsMuted] = useState(false);
+    const [error, setError] = useState('');
+    const [localStream, setLocalStream] = useState(null);
+    const [remoteStream, setRemoteStream] = useState(null);
+    const [storedOffer, setStoredOffer] = useState(initialOffer);
     
+    // Refs
+    const peerConnectionRef = useRef(null);
     const localStreamRef = useRef(null);
     const remoteStreamRef = useRef(null);
-    const peerConnectionRef = useRef(null);
     const timerRef = useRef(null);
+    const iceCandidatesQueue = useRef([]);
+    const localAudioRef = useRef(null);
+    const remoteAudioRef = useRef(null);
 
     // Update storedOffer when initialOffer changes
     useEffect(() => {
@@ -88,8 +94,14 @@ const VoiceCall = ({
     // WebRTC configuration
     const configuration = {
         iceServers: [
+            // Google's public STUN servers
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
+            
+            // Free TURN servers - Note: For production, use your own TURN server
             {
                 urls: 'turn:openrelay.metered.ca:80',
                 username: 'openrelayproject',
@@ -104,9 +116,14 @@ const VoiceCall = ({
                 urls: 'turn:openrelay.metered.ca:443?transport=tcp',
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
-            }
+            },
+            // Backup TURN servers from Twilio or other providers could be added here
         ],
-        iceCandidatePoolSize: 10
+        iceCandidatePoolSize: 10,
+        iceTransportPolicy: 'all', // Try 'relay' if still having issues
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
+        sdpSemantics: 'unified-plan'
     };
 
     useEffect(() => {
@@ -117,7 +134,7 @@ const VoiceCall = ({
 
         if (callType === 'outgoing') {
             console.log('Initializing outgoing call');
-            initializeCall();
+            initializeCall(true);
         }
         
         return () => {
@@ -126,80 +143,114 @@ const VoiceCall = ({
         };
     }, [isOpen, socket]);
 
-    const initializeCall = async () => {
+    // Initialize the WebRTC peer connection and media stream
+    const initializeCall = async (isOutgoing) => {
         try {
-            console.log('Starting call initialization');
-            if (!socket) {
-                throw new Error('Socket connection not available');
+            console.log('Initializing call as', isOutgoing ? 'outgoing' : 'incoming');
+            
+            // Clean up any existing connection first
+            if (peerConnectionRef.current) {
+                console.log('Cleaning up existing peer connection');
+                peerConnectionRef.current.close();
+                peerConnectionRef.current = null;
             }
-
-            // Request media permissions
-            console.log('Requesting audio permissions');
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            console.log('Audio permissions granted');
+            
+            // Reset our queue of ICE candidates
+            iceCandidatesQueue.current = [];
+            
+            // Request audio permissions
+            console.log('Requesting audio stream');
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true
+            }).catch(error => {
+                // Handle permission errors
+                console.error('Error getting user media:', error);
+                handlePermissionIssues(error);
+                throw error; // Re-throw to stop initialization
+            });
+            
+            console.log('Audio stream obtained, setting local stream');
             localStreamRef.current = stream;
-
-            // Create peer connection
-            console.log('Creating peer connection');
+            
+            // Set up the audio element for the local stream
+            const localAudio = document.getElementById('localAudio');
+            if (localAudio) {
+                localAudio.srcObject = stream;
+                localAudio.muted = true; // Mute local audio to avoid echo
+            }
+            
+            // Create a new peer connection with our enhanced configuration
+            console.log('Creating new RTCPeerConnection with config:', configuration);
             const peerConnection = new RTCPeerConnection(configuration);
             peerConnectionRef.current = peerConnection;
-
-            // Add local stream
-            stream.getTracks().forEach(track => {
-                console.log('Adding local track to peer connection');
+            
+            // Add all audio tracks from our stream to the peer connection
+            stream.getAudioTracks().forEach(track => {
+                console.log('Adding audio track to peer connection:', track.label);
                 peerConnection.addTrack(track, stream);
             });
-
-            // Handle incoming stream
+            
+            // Handle incoming audio streams
             peerConnection.ontrack = (event) => {
-                console.log('Received remote track', event.streams[0]);
-                remoteStreamRef.current = event.streams[0];
-                const remoteAudio = document.getElementById('remoteAudio');
-                if (remoteAudio) {
-                    remoteAudio.srcObject = event.streams[0];
+                console.log('Received remote track:', event.track.kind);
+                if (event.streams && event.streams[0]) {
+                    console.log('Setting remote stream from ontrack event');
+                    remoteStreamRef.current = event.streams[0];
+                    
+                    // Set up the audio element for the remote stream
+                    const remoteAudio = document.getElementById('remoteAudio');
+                    if (remoteAudio) {
+                        console.log('Setting srcObject for remote audio element');
+                        remoteAudio.srcObject = event.streams[0];
+                    }
                 }
             };
-
-            // Handle connection state changes
-            peerConnection.oniceconnectionstatechange = () => {
-                const state = peerConnection.iceConnectionState;
-                console.log('ICE connection state changed:', state);
+            
+            // Add comprehensive logging for connection state
+            peerConnection.onconnectionstatechange = () => {
+                const state = peerConnection.connectionState;
+                console.log('Connection state changed:', state);
                 
                 if (state === 'connected') {
-                    console.log('Call connected successfully');
+                    console.log('WebRTC connection established successfully');
                     setCallStatus('ongoing');
                     startTimer();
-                } else if (state === 'failed' || state === 'disconnected') {
-                    console.log('Call connection failed');
-                    setError('Connection failed');
-                    cleanup();
+                } else if (state === 'failed' || state === 'disconnected' || state === 'closed') {
+                    console.log(`WebRTC connection ${state}`);
+                    if (state === 'failed') {
+                        setError('Connection failed. Please ensure both devices have good network connectivity.');
+                        cleanup();
+                    }
                 }
             };
-
-            // Add logging for signaling state changes
+            
+            // Log signaling state changes
             peerConnection.onsignalingstatechange = () => {
                 console.log('Signaling state changed:', peerConnection.signalingState);
             };
-
-            // Add detailed ICE gathering state logging
+            
+            // Log ICE gathering state changes
             peerConnection.onicegatheringstatechange = () => {
-                console.log('ICE gathering state:', peerConnection.iceGatheringState);
+                console.log('ICE gathering state changed:', peerConnection.iceGatheringState);
             };
-
-            // Add connection state change logging
-            peerConnection.onconnectionstatechange = () => {
-                console.log('Connection state:', peerConnection.connectionState);
-                if (peerConnection.connectionState === 'connected') {
-                    console.log('WebRTC connection established successfully');
-                } else if (peerConnection.connectionState === 'failed') {
-                    console.log('WebRTC connection failed');
-                    setError('Connection failed');
-                    cleanup();
+            
+            // Handle ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate && socket) {
+                    console.log('Generated ICE candidate', event.candidate);
+                    
+                    // Make sure we're sending the full candidate information
+                    socket.emit('ice-candidate', {
+                        candidate: event.candidate,
+                        to: remoteUser.uid
+                    });
+                } else if (!event.candidate) {
+                    console.log('ICE candidate gathering complete');
                 }
             };
 
             // For outgoing calls, create and send offer
-            if (callType === 'outgoing') {
+            if (isOutgoing) {
                 console.log('Creating call offer');
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
@@ -221,102 +272,81 @@ const VoiceCall = ({
                 });
             }
 
-            // Handle ICE candidates
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate && socket) {
-                    console.log('Generated ICE candidate');
-                    socket.emit('ice-candidate', {
-                        candidate: event.candidate,
-                        to: remoteUser.uid
-                    });
-                }
-            };
-
+            console.log('Call initialization completed successfully');
+            return peerConnection;
         } catch (error) {
-            console.error('Call initialization failed:', error);
-            setError(error.message);
+            console.error('Error initializing call:', error);
+            setError('Failed to access microphone: ' + (error.message || 'Permission denied'));
             setCallStatus('ended');
+            throw error; // Re-throw to be handled by the caller
         }
     };
 
-    const handleAnswer = async (answer) => {
+    // Handle incoming answer for outgoing call
+    const handleAnswer = async (data) => {
         try {
-            console.log('Received call answer');
-            if (peerConnectionRef.current && peerConnectionRef.current.signalingState !== 'closed') {
-                await peerConnectionRef.current.setRemoteDescription(
-                    new RTCSessionDescription(answer)
-                );
+            console.log('Call answered, setting remote description');
+            const { answer } = data;
+            
+            if (peerConnectionRef.current) {
+                console.log('Setting remote description from answer');
+                await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+                console.log('Remote description set successfully');
+                
+                // Process any queued ICE candidates now that remote description is set
+                await processIceCandidates();
+                
                 setCallStatus('connecting');
+                console.log('Call status updated to connecting');
             }
         } catch (error) {
-            console.error('Error handling answer:', error);
-            setError(error.message);
+            console.error('Error handling call answer:', error);
+            setError('Failed to establish connection');
+            cleanup();
         }
     };
 
-    const handleIncomingCall = async (offer) => {
+    // Handle incoming call offer
+    const handleIncomingCall = async () => {
         try {
-            console.log('Handling incoming call with offer:', {
-                offerReceived: offer,
-                type: offer?.type,
-                sdp: offer?.sdp
-            });
-            
-            if (!offer) {
-                throw new Error('No offer received');
+            console.log('Handling incoming call with offer:', storedOffer);
+            if (!storedOffer) {
+                console.error('No offer available for incoming call');
+                setError('Call setup failed - missing offer');
+                return;
             }
 
-            if (!offer.sdp) {
-                throw new Error('Offer missing SDP');
+            await initializeCall(false);
+
+            if (peerConnectionRef.current) {
+                console.log('Setting remote description from offer');
+                await peerConnectionRef.current.setRemoteDescription(
+                    new RTCSessionDescription(storedOffer)
+                );
+                console.log('Remote description set successfully');
+                
+                // Process any queued ICE candidates
+                await processIceCandidates();
+
+                console.log('Creating answer');
+                const answer = await peerConnectionRef.current.createAnswer();
+                console.log('Answer created');
+
+                await peerConnectionRef.current.setLocalDescription(answer);
+                console.log('Local description set');
+
+                socket.emit('call-answered', {
+                    answer,
+                    to: storedOffer.from
+                });
+
+                setCallStatus('connecting');
+                console.log('Call status updated to connecting after creating answer');
             }
-
-            // Ensure offer has the correct type
-            const formattedOffer = {
-                type: 'offer',
-                sdp: offer.sdp
-            };
-
-            console.log('Using formatted offer:', formattedOffer);
-
-            await initializeCall();
-            
-            if (!peerConnectionRef.current) {
-                throw new Error('Peer connection not initialized');
-            }
-
-            if (peerConnectionRef.current.signalingState === 'closed') {
-                throw new Error('Peer connection is closed');
-            }
-
-            console.log('Setting remote description');
-            await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(formattedOffer));
-            
-            console.log('Creating answer');
-            const answer = await peerConnectionRef.current.createAnswer();
-            
-            console.log('Setting local description');
-            await peerConnectionRef.current.setLocalDescription(answer);
-            
-            // Log the complete answer object
-            console.log('Generated answer:', {
-                type: answer.type,
-                sdp: answer.sdp,
-                complete: answer
-            });
-
-            socket.emit('call-answered', {
-                to: remoteUser.uid,
-                answer: {
-                    type: 'answer',
-                    sdp: answer.sdp
-                }
-            });
-            
-            setCallStatus('connecting');
         } catch (error) {
             console.error('Error handling incoming call:', error);
-            setError(error.message);
-            setCallStatus('ended');
+            setError('Failed to answer call: ' + (error.message || 'Connection error'));
+            cleanup();
         }
     };
 
@@ -337,6 +367,9 @@ const VoiceCall = ({
         if (timerRef.current) {
             clearInterval(timerRef.current);
         }
+        
+        setCallDuration(0);
+        
         timerRef.current = setInterval(() => {
             setCallDuration(prev => prev + 1);
         }, 1000);
@@ -345,170 +378,495 @@ const VoiceCall = ({
     const formatDuration = (seconds) => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
     const toggleMute = () => {
-        if (localStreamRef.current) {
-            const audioTrack = localStreamRef.current.getAudioTracks()[0];
-            audioTrack.enabled = !audioTrack.enabled;
-            setIsMuted(!isMuted);
-        }
+        if (!localStreamRef.current) return;
+        
+        const audioTracks = localStreamRef.current.getAudioTracks();
+        if (audioTracks.length === 0) return;
+        
+        const newMuteState = !isMuted;
+        console.log(newMuteState ? 'Muting audio' : 'Unmuting audio');
+        
+        audioTracks.forEach(track => {
+            track.enabled = !newMuteState;
+        });
+        
+        setIsMuted(newMuteState);
     };
 
     const endCall = () => {
-        console.log('Ending call');
-        socket.emit('end-call', {
-            to: remoteUser.uid
-        });
+        console.log('User ended call');
+        
+        // Notify the remote user that the call has ended
+        if (socket && remoteUser) {
+            console.log('Sending call-ended event to:', remoteUser.uid);
+            socket.emit('call-ended', {
+                to: remoteUser.uid
+            });
+        }
+        
+        // Clean up resources
+        cleanup();
+        
+        // Close the call modal
+        onClose();
+    };
+
+    const rejectCall = () => {
+        console.log('Rejecting incoming call');
+        
+        if (socket && storedOffer && storedOffer.from) {
+            console.log('Sending call-rejected event to:', storedOffer.from);
+            socket.emit('call-rejected', {
+                to: storedOffer.from
+            });
+        }
+        
+        // Clean up and close
         cleanup();
         onClose();
     };
 
     const cleanup = () => {
         console.log('Cleaning up call resources');
-        // Stop all tracks in local stream
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => track.stop());
-        }
-
-        // Close peer connection
-        if (peerConnectionRef.current) {
-            peerConnectionRef.current.close();
-        }
-
-        // Clear timer
+        
+        // Stop the call timer if running
         if (timerRef.current) {
             clearInterval(timerRef.current);
+            timerRef.current = null;
         }
-
-        // Reset state
-        setCallDuration(0);
+        
+        // Close and clean up peer connection
+        if (peerConnectionRef.current) {
+            try {
+                // Remove all event listeners
+                peerConnectionRef.current.ontrack = null;
+                peerConnectionRef.current.onicecandidate = null;
+                peerConnectionRef.current.oniceconnectionstatechange = null;
+                peerConnectionRef.current.onsignalingstatechange = null;
+                peerConnectionRef.current.onicegatheringstatechange = null;
+                peerConnectionRef.current.onconnectionstatechange = null;
+                
+                // Close the connection
+                peerConnectionRef.current.close();
+                console.log('Peer connection closed');
+            } catch (err) {
+                console.error('Error closing peer connection:', err);
+            } finally {
+                peerConnectionRef.current = null;
+            }
+        }
+        
+        // Stop and clean up local audio stream
+        if (localStreamRef.current) {
+            try {
+                localStreamRef.current.getTracks().forEach(track => {
+                    track.stop();
+                    console.log('Local track stopped:', track.kind);
+                });
+            } catch (err) {
+                console.error('Error stopping local tracks:', err);
+            } finally {
+                setLocalStream(null);
+                localStreamRef.current = null;
+            }
+        }
+        
+        // Clear remote stream
+        setRemoteStream(null);
+        remoteStreamRef.current = null;
+        
+        // Clear audio elements
+        const localAudio = document.getElementById('localAudio');
+        if (localAudio) localAudio.srcObject = null;
+        
+        const remoteAudio = document.getElementById('remoteAudio');
+        if (remoteAudio) remoteAudio.srcObject = null;
+        
+        // Reset call status if not already ended
         if (callStatus !== 'ended') {
             setCallStatus('ended');
         }
+        
+        // Clear any stored offers or errors
+        setStoredOffer(null);
+        
+        console.log('Call resources cleaned up successfully');
     };
 
-    // Update socket event listeners to check for socket
+    // Setup socket event listeners for call handling
     useEffect(() => {
-        if (!socket) return;
-
-        const socketHandlers = {
-            'call-answered': ({ answer }) => {
-                console.log('Call answered');
-                handleAnswer(answer);
-            },
-            'incoming-call': ({ from, offer }) => {
-                console.log('Incoming call received:', { from, offer });
-                if (!offer) {
-                    console.error('No offer received in incoming-call');
-                    return;
+        if (!socket || !isOpen) return;
+        
+        console.log('Setting up socket event listeners for call handling');
+        
+        // Handle remote ICE candidates
+        const handleIceCandidate = async ({ candidate }) => {
+            try {
+                if (peerConnectionRef.current && candidate) {
+                    console.log('Received ICE candidate');
+                    
+                    if (peerConnectionRef.current.remoteDescription === null) {
+                        // Queue the candidate if remote description not set yet
+                        console.log('Remote description not set yet, queuing ICE candidate');
+                        iceCandidatesQueue.current.push(candidate);
+                    } else {
+                        // Add the candidate immediately
+                        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+                        console.log('Added ICE candidate successfully');
+                    }
                 }
-                // Store the complete offer object with type
-                const formattedOffer = {
-                    type: 'offer',
-                    sdp: offer.sdp
-                };
-                console.log('Setting incoming offer:', formattedOffer);
-                setStoredOffer(formattedOffer);
-                setCallStatus('incoming');
-            },
-            'ice-candidate': ({ candidate }) => {
-                handleIceCandidate(candidate);
-            },
-            'call-ended': () => {
-                console.log('Call ended by remote user');
-                cleanup();
-                onClose();
-            },
-            'call-failed': ({ error }) => {
-                console.log('Call failed:', error);
-                setError(error);
-                setCallStatus('ended');
+            } catch (err) {
+                console.error('Error adding received ICE candidate', err);
             }
         };
-
-        // Register all handlers
-        Object.entries(socketHandlers).forEach(([event, handler]) => {
-            socket.on(event, handler);
-        });
-
-        // Cleanup function
-        return () => {
-            Object.keys(socketHandlers).forEach(event => {
-                socket.off(event);
-            });
+        
+        // Handle call answered event
+        const handleCallAnswered = async (data) => {
+            console.log('Call answered event received', data);
+            await handleAnswer(data);
         };
-    }, [socket]);
+        
+        // Handle incoming call event
+        const handleIncomingCallEvent = ({ from, offer }) => {
+            console.log('Incoming call received from:', from);
+            if (!offer) {
+                console.error('No offer received in incoming-call');
+                return;
+            }
+            
+            // Store the complete offer object with from field
+            const processedOffer = {
+                ...offer,
+                from
+            };
+            
+            console.log('Setting incoming offer:', processedOffer);
+            setStoredOffer(processedOffer);
+            setCallStatus('incoming');
+        };
+        
+        // Handle call ended by remote user
+        const handleCallEnded = () => {
+            console.log('Call ended by remote user');
+            setError('Call ended by remote user');
+            cleanup();
+            onClose();
+        };
+        
+        // Handle call failed
+        const handleCallFailed = ({ error }) => {
+            console.log('Call failed:', error);
+            setError(error || 'Call failed');
+            setCallStatus('ended');
+        };
+        
+        // Register event handlers
+        socket.on('ice-candidate', handleIceCandidate);
+        socket.on('call-answered', handleCallAnswered);
+        socket.on('incoming-call', handleIncomingCallEvent);
+        socket.on('call-ended', handleCallEnded);
+        socket.on('call-failed', handleCallFailed);
+        
+        // Clean up event listeners when component unmounts
+        return () => {
+            console.log('Cleaning up socket event listeners');
+            socket.off('ice-candidate', handleIceCandidate);
+            socket.off('call-answered', handleCallAnswered);
+            socket.off('incoming-call', handleIncomingCallEvent);
+            socket.off('call-ended', handleCallEnded);
+            socket.off('call-failed', handleCallFailed);
+        };
+    }, [isOpen, socket, onClose]);
+    
+    // Handle call status changes to update UI
+    useEffect(() => {
+        console.log('Call status changed to:', callStatus);
+        
+        // Start timer when call becomes ongoing
+        if (callStatus === 'ongoing') {
+            startTimer();
+        }
+        
+        // Clean up when call ends
+        if (callStatus === 'ended') {
+            cleanup();
+        }
+    }, [callStatus]);
 
     // Add debugging for incomingOffer state
     useEffect(() => {
         console.log('incomingOffer updated:', storedOffer);
     }, [storedOffer]);
 
+    // Function to apply queued ICE candidates after setting remote description
+    const processIceCandidates = async () => {
+        try {
+            if (peerConnectionRef.current && iceCandidatesQueue.current.length > 0) {
+                console.log(`Processing ${iceCandidatesQueue.current.length} queued ICE candidates`);
+                
+                // Process all queued candidates
+                for (const candidate of iceCandidatesQueue.current) {
+                    await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+                    console.log('Added queued ICE candidate');
+                }
+                
+                // Clear the queue
+                iceCandidatesQueue.current = [];
+            }
+        } catch (err) {
+            console.error('Error processing queued ICE candidates:', err);
+        }
+    };
+
+    // Create and send an offer for an outgoing call
+    const makeCall = async () => {
+        try {
+            console.log('Initiating outgoing call to:', remoteUser.username);
+            
+            await initializeCall(true);
+            
+            if (peerConnectionRef.current) {
+                console.log('Creating offer for outgoing call');
+                const offer = await peerConnectionRef.current.createOffer({
+                    offerToReceiveAudio: true
+                });
+                console.log('Offer created:', offer);
+                
+                await peerConnectionRef.current.setLocalDescription(offer);
+                console.log('Local description set successfully');
+                
+                // Log the complete offer for debugging
+                console.log('Sending call offer:', {
+                    to: remoteUser.uid,
+                    from: localUser.uid,
+                    offer: peerConnectionRef.current.localDescription
+                });
+                
+                socket.emit('call-user', {
+                    userToCall: remoteUser.uid,
+                    from: localUser.uid,
+                    offer: peerConnectionRef.current.localDescription
+                });
+                
+                setCallStatus('calling');
+                console.log('Call status updated to calling');
+            } else {
+                throw new Error('Peer connection failed to initialize');
+            }
+        } catch (error) {
+            console.error('Error making call:', error);
+            setError('Failed to initiate call: ' + (error.message || 'Connection error'));
+            cleanup();
+        }
+    };
+
+    // Function to detect and handle permission issues
+    const handlePermissionIssues = (error) => {
+        console.error('Permission or initialization error:', error);
+        
+        // Check for different error types
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            setError('Microphone access denied. Please allow microphone access in your browser settings.');
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+            setError('No microphone found. Please connect a microphone and try again.');
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+            setError('Could not access your microphone. It might be in use by another application.');
+        } else if (error.name === 'OverconstrainedError') {
+            setError('Your microphone does not meet the required constraints.');
+        } else if (error.name === 'TypeError' || error.message.includes('getUserMedia is not a function')) {
+            setError('Your browser does not support audio calls or is running in a non-secure context.');
+        } else {
+            setError(`Call initialization failed: ${error.message || 'Unknown error'}`);
+        }
+        
+        setCallStatus('ended');
+    };
+    
+    // Separate function to pre-check permissions before initiating a call
+    const preCheckPermissions = async () => {
+        try {
+            console.log('Pre-checking audio permissions');
+            await navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    // Stop all tracks from the test stream
+                    stream.getTracks().forEach(track => track.stop());
+                    console.log('Audio permissions pre-check successful');
+                    // Now we can proceed with making the call
+                    makeCall();
+                })
+                .catch(error => {
+                    console.error('Pre-check permissions failed:', error);
+                    handlePermissionIssues(error);
+                });
+        } catch (error) {
+            console.error('Error in permission pre-check:', error);
+            handlePermissionIssues(error);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
         <div className={styles.voiceCallContainer}>
-            <div className={styles.voiceCallCard}>
+            <div className={styles.voiceCallModal}>
                 <div className={styles.callHeader}>
-                    <h3>{remoteUser?.username || 'User'}</h3>
-                    <p className={styles.callStatus}>
-                        {callStatus === 'connecting' && 'Connecting...'}
-                        {callStatus === 'ongoing' && formatDuration(callDuration)}
-                        {callStatus === 'incoming' && 'Incoming call...'}
-                        {callStatus === 'ended' && 'Call ended'}
-                    </p>
-                    {error && <p className={styles.errorMessage}>{error}</p>}
+                    <h2>Voice Call</h2>
+                    {error && <div className={styles.errorMessage}>{error}</div>}
                 </div>
                 
-                <div className={styles.userAvatar}>
-                    {remoteUser?.profilepicture ? (
-                        <img src={remoteUser.profilepicture} alt={remoteUser.username} />
-                    ) : (
-                        <div className={styles.defaultAvatar}>{remoteUser?.username?.[0] || 'U'}</div>
-                    )}
+                <div className={styles.userInfo}>
+                    <div className={styles.avatar}>
+                        {remoteUser.profilePicture ? (
+                            <img src={remoteUser.profilePicture} alt={remoteUser.username} />
+                        ) : (
+                            <div className={styles.defaultAvatar}>
+                                {remoteUser.username.charAt(0).toUpperCase()}
+                            </div>
+                        )}
+                    </div>
+                    <div className={styles.username}>{remoteUser.username}</div>
                 </div>
+                
+                {/* Hidden audio elements for streams */}
+                <audio id="localAudio" autoPlay muted ref={localAudioRef} />
+                <audio id="remoteAudio" autoPlay ref={remoteAudioRef} />
                 
                 <div className={styles.callActions}>
-                    {callStatus === 'incoming' ? (
+                    {callStatus === 'idle' && (
                         <>
-                            <button 
-                                className={`${styles.callButton} ${styles.acceptButton}`} 
-                                onClick={() => handleIncomingCall(storedOffer)}
-                            >
-                                <PhoneCallIcon />
-                            </button>
-                            <button 
-                                className={`${styles.callButton} ${styles.declineButton}`} 
-                                onClick={endCall}
-                            >
-                                <PhoneOff />
-                            </button>
+                            <div className={styles.callDetails}>
+                                {callType === 'incoming' ? (
+                                    <span>Incoming call from {remoteUser.username}</span>
+                                ) : (
+                                    <span>Call {remoteUser.username}</span>
+                                )}
+                            </div>
+                            <div className={styles.buttons}>
+                                {callType === 'incoming' ? (
+                                    <>
+                                        <button 
+                                            className={`${styles.callButton} ${styles.rejectButton}`} 
+                                            onClick={rejectCall}
+                                        >
+                                            <PhoneOffIcon />
+                                        </button>
+                                        <button 
+                                            className={`${styles.callButton} ${styles.acceptButton}`} 
+                                            onClick={() => handleIncomingCall()}
+                                        >
+                                            <PhoneCallIcon />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button 
+                                        className={`${styles.callButton} ${styles.callingButton}`} 
+                                        onClick={preCheckPermissions}
+                                    >
+                                        <PhoneCallIcon />
+                                    </button>
+                                )}
+                            </div>
                         </>
-                    ) : (
+                    )}
+                    
+                    {callStatus === 'calling' && (
                         <>
-                            <button 
-                                className={`${styles.callButton} ${isMuted ? styles.active : ''}`} 
-                                onClick={toggleMute}
-                                disabled={callStatus !== 'ongoing'}
-                            >
-                                {isMuted ? <MicOff /> : <Mic />}
-                            </button>
-                            <button 
-                                className={`${styles.callButton} ${styles.endButton}`} 
-                                onClick={endCall}
-                            >
-                                <PhoneOff />
-                            </button>
+                            <div className={styles.callDetails}>
+                                <span>Calling {remoteUser.username}...</span>
+                            </div>
+                            <div className={styles.buttons}>
+                                <button 
+                                    className={`${styles.callButton} ${styles.endButton}`} 
+                                    onClick={endCall}
+                                >
+                                    <PhoneOffIcon />
+                                </button>
+                            </div>
+                        </>
+                    )}
+                    
+                    {callStatus === 'incoming' && (
+                        <>
+                            <div className={styles.callDetails}>
+                                <span>Incoming call from {remoteUser.username}</span>
+                            </div>
+                            <div className={styles.buttons}>
+                                <button 
+                                    className={`${styles.callButton} ${styles.rejectButton}`} 
+                                    onClick={rejectCall}
+                                >
+                                    <PhoneOffIcon />
+                                </button>
+                                <button 
+                                    className={`${styles.callButton} ${styles.acceptButton}`} 
+                                    onClick={() => handleIncomingCall()}
+                                >
+                                    <PhoneCallIcon />
+                                </button>
+                            </div>
+                        </>
+                    )}
+                    
+                    {callStatus === 'connecting' && (
+                        <>
+                            <div className={styles.callDetails}>
+                                <span>Connecting...</span>
+                            </div>
+                            <div className={styles.buttons}>
+                                <button 
+                                    className={`${styles.callButton} ${styles.endButton}`} 
+                                    onClick={endCall}
+                                >
+                                    <PhoneOffIcon />
+                                </button>
+                            </div>
+                        </>
+                    )}
+                    
+                    {callStatus === 'ongoing' && (
+                        <>
+                            <div className={styles.callDetails}>
+                                <span>In call with {remoteUser.username}</span>
+                                <span className={styles.duration}>{formatDuration(callDuration)}</span>
+                            </div>
+                            <div className={styles.buttons}>
+                                <button 
+                                    className={`${styles.callButton} ${isMuted ? styles.active : ''}`} 
+                                    onClick={toggleMute}
+                                >
+                                    {isMuted ? <MicOffIcon /> : <MicIcon />}
+                                </button>
+                                <button 
+                                    className={`${styles.callButton} ${styles.endButton}`} 
+                                    onClick={endCall}
+                                >
+                                    <PhoneOffIcon />
+                                </button>
+                            </div>
+                        </>
+                    )}
+                    
+                    {callStatus === 'reconnecting' && (
+                        <>
+                            <div className={styles.callDetails}>
+                                <span>Connection issues. Reconnecting...</span>
+                            </div>
+                            <div className={styles.buttons}>
+                                <button 
+                                    className={`${styles.callButton} ${styles.endButton}`} 
+                                    onClick={endCall}
+                                >
+                                    <PhoneOffIcon />
+                                </button>
+                            </div>
                         </>
                     )}
                 </div>
             </div>
-            
-            {/* Audio elements */}
-            <audio id="remoteAudio" autoPlay playsInline></audio>
-            <audio id="localAudio" muted autoPlay playsInline></audio>
         </div>
     );
 };
