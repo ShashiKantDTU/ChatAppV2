@@ -85,20 +85,21 @@
 
 .changeAvatarButton {
   position: absolute;
-  bottom: 0;
-  right: 0;
+  bottom: -5px;
+  right: -5px;
   background: var(--primary-color);
   color: white;
-  border: none;
-  width: 36px;
-  height: 36px;
+  border: 3px solid var(--background-primary, #fff);
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 5;
 }
 
 .changeAvatarButton:hover {
