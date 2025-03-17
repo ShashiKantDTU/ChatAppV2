@@ -136,8 +136,11 @@ const VoiceCall = ({
                 candidateTypes: { host: 0, srflx: 0, relay: 0 }
             });
             
-            // Get TURN config based on mode
-            const config = forceRelay ? getRelayOnlyConfig() : getTurnServerConfig();
+            // Get TURN config based on mode - now async
+            const config = forceRelay ? 
+                await getRelayOnlyConfig() : 
+                await getTurnServerConfig();
+            
             console.log('Using WebRTC configuration:', config);
             
             // Request audio permissions
@@ -225,9 +228,19 @@ const VoiceCall = ({
             // Re-initialize with forced relay
             cleanupPeerConnection();
             if (callType === 'outgoing') {
-                initializeCall(true, true);
+                // Use Promise to handle the async call
+                initializeCall(true, true).catch(err => {
+                    console.error('Error retrying call with relay:', err);
+                    setError('Failed to retry call. Please try again.');
+                    setCallStatus('ended');
+                });
             } else {
-                handleIncomingCall(true);
+                // Use Promise to handle the async call
+                handleIncomingCall(true).catch(err => {
+                    console.error('Error retrying incoming call with relay:', err);
+                    setError('Failed to retry incoming call. Please try again.');
+                    setCallStatus('ended');
+                });
             }
         } else {
             // Already tried relay mode or already retrying
@@ -323,9 +336,19 @@ const VoiceCall = ({
                         // Re-initialize with forced relay
                         cleanupPeerConnection();
                         if (callType === 'outgoing') {
-                            initializeCall(true, true);
+                            // Handle async initialization
+                            initializeCall(true, true).catch(err => {
+                                console.error('Error retrying call with relay after failure:', err);
+                                setError('Failed to retry call. Please try again.');
+                                setCallStatus('ended');
+                            });
                         } else {
-                            handleIncomingCall(true);
+                            // Handle async initialization
+                            handleIncomingCall(true).catch(err => {
+                                console.error('Error retrying incoming call with relay after failure:', err);
+                                setError('Failed to retry incoming call. Please try again.');
+                                setCallStatus('ended');
+                            });
                         }
                     } else {
                         setError('Connection failed. Please try again.');
@@ -805,7 +828,11 @@ const VoiceCall = ({
         
         // Re-initialize call
         if (callType === 'outgoing') {
-            startCall();
+            startCall().catch(err => {
+                console.error('Error retrying call manually:', err);
+                setError('Failed to retry call. Please try again.');
+                setCallStatus('ended');
+            });
         } else {
             setCallStatus('incoming');
         }

@@ -2,95 +2,170 @@
  * TURN Server Service
  * 
  * This service provides TURN server credentials for WebRTC connections.
- * Uses multiple providers for better reliability.
+ * Uses Metered.ca for reliable TURN server access.
  */
 
-// Primary TURN servers - Google's free STUN servers
+// STUN servers for basic connectivity
 const STUN_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun2.l.google.com:19302' }
+  { urls: 'stun:stun.relay.metered.ca:80' }
 ];
 
-// Metered.ca free TURN servers - The most reliable free option
-const METERED_TURN_SERVERS = {
-  urls: [
-    'turn:openrelay.metered.ca:443?transport=tcp',
-    'turn:openrelay.metered.ca:443',
-    'turn:openrelay.metered.ca:80?transport=tcp',
-    'turn:openrelay.metered.ca:80'
-  ],
-  username: 'openrelayproject',
-  credential: 'openrelayproject'
-};
+// Static Metered.ca TURN server credentials (used as fallback)
+const STATIC_METERED_TURN_SERVERS = [
+  {
+    urls: "turn:global.relay.metered.ca:80",
+    username: "54802f233bc4f94626bf76e1",
+    credential: "ipCZUvoLoYzVeHVz",
+  },
+  {
+    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+    username: "54802f233bc4f94626bf76e1",
+    credential: "ipCZUvoLoYzVeHVz",
+  },
+  {
+    urls: "turn:global.relay.metered.ca:443",
+    username: "54802f233bc4f94626bf76e1",
+    credential: "ipCZUvoLoYzVeHVz",
+  },
+  {
+    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+    username: "54802f233bc4f94626bf76e1",
+    credential: "ipCZUvoLoYzVeHVz",
+  }
+];
 
-// Backup Google TURN servers
-const GOOGLE_TURN_SERVERS = {
-  urls: [
-    'turn:66.96.239.203:3478?transport=udp',
-    'turn:66.96.239.203:3478?transport=tcp',
-    'turn:66.96.239.203:443?transport=tcp'
-  ],
-  username: 'openrelayproject',
-  credential: 'openrelayproject'
-};
-
-// WebRTC.org free TURN servers for backup
-const WEBRTC_ORG_TURN_SERVERS = {
-  urls: [
-    'turn:turn.webrtc.org:3478?transport=udp',
-    'turn:turn.webrtc.org:3478?transport=tcp',
-    'turn:turn.webrtc.org:443?transport=tcp'
-  ],
-  username: 'webrtc',
-  credential: 'webrtc'
-};
+// Cache for dynamic TURN credentials
+let cachedTurnCredentials = null;
+let lastFetchTime = 0;
+const CREDENTIALS_TTL = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
 
 /**
- * Get enhanced WebRTC configuration with multiple TURN servers for reliability
+ * Fetch TURN server credentials from Metered.ca API
+ * @returns {Promise<Array>} Array of ICE server configurations
  */
-export const getTurnServerConfig = () => {
-  console.log('Getting TURN server configuration with multiple providers');
+async function fetchTurnCredentials() {
+  try {
+    console.log('Fetching fresh TURN credentials from Metered.ca');
+    const response = await fetch(
+      "https://shashikant.metered.live/api/v1/turn/credentials?apiKey=0b3cef3685935b3424354cbea99c073db622"
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch TURN credentials: ${response.status}`);
+    }
+    
+    const credentials = await response.json();
+    console.log('Successfully retrieved TURN credentials');
+    
+    // Cache the credentials and timestamp
+    cachedTurnCredentials = credentials;
+    lastFetchTime = Date.now();
+    
+    return credentials;
+  } catch (error) {
+    console.error('Error fetching TURN credentials:', error);
+    return null;
+  }
+}
+
+/**
+ * Get TURN credentials, either from cache or by fetching fresh ones
+ * @returns {Promise<Array>} Array of ICE server configurations
+ */
+async function getTurnCredentials() {
+  // If we have cached credentials that are less than 12 hours old, use them
+  if (cachedTurnCredentials && (Date.now() - lastFetchTime < CREDENTIALS_TTL)) {
+    console.log('Using cached TURN credentials');
+    return cachedTurnCredentials;
+  }
   
-  return {
-    iceServers: [
-      // Primary TURN servers
-      METERED_TURN_SERVERS,
-      // Backup TURN servers
-      GOOGLE_TURN_SERVERS,
-      WEBRTC_ORG_TURN_SERVERS,
-      // STUN servers
-      ...STUN_SERVERS
-    ],
-    iceCandidatePoolSize: 10,
-    iceTransportPolicy: 'all', // Try all connection types first
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
-    sdpSemantics: 'unified-plan'
-  };
+  // Otherwise fetch new credentials
+  const credentials = await fetchTurnCredentials();
+  
+  // If fetching fails, use static credentials
+  if (!credentials) {
+    console.log('Falling back to static TURN credentials');
+    return STATIC_METERED_TURN_SERVERS;
+  }
+  
+  return credentials;
+}
+
+/**
+ * Get enhanced WebRTC configuration with dynamic TURN servers
+ * @returns {Promise<Object>} WebRTC configuration object
+ */
+export const getTurnServerConfig = async () => {
+  console.log('Getting TURN server configuration from Metered.ca');
+  
+  try {
+    // Get credentials dynamically
+    const iceServers = await getTurnCredentials();
+    
+    return {
+      iceServers: [
+        ...iceServers,
+        ...STUN_SERVERS
+      ],
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: 'all', // Try all connection types first
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      sdpSemantics: 'unified-plan'
+    };
+  } catch (error) {
+    console.error('Error getting TURN configuration:', error);
+    
+    // Fallback configuration
+    return {
+      iceServers: [
+        ...STATIC_METERED_TURN_SERVERS,
+        ...STUN_SERVERS
+      ],
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: 'all',
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      sdpSemantics: 'unified-plan'
+    };
+  }
 };
 
 /**
  * Get forced relay config (forces the use of TURN servers)
  * This is more reliable in restrictive networks but uses more bandwidth
+ * @returns {Promise<Object>} WebRTC configuration with forced relay
  */
-export const getRelayOnlyConfig = () => {
+export const getRelayOnlyConfig = async () => {
   console.log('Getting forced TURN relay configuration');
   
-  return {
-    iceServers: [
-      // Primary TURN servers
-      METERED_TURN_SERVERS,
-      // Backup TURN servers
-      GOOGLE_TURN_SERVERS,
-      WEBRTC_ORG_TURN_SERVERS
-    ],
-    iceCandidatePoolSize: 10,
-    iceTransportPolicy: 'relay', // Force using TURN servers only
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
-    sdpSemantics: 'unified-plan'
-  };
+  try {
+    // Get credentials dynamically
+    const iceServers = await getTurnCredentials();
+    
+    return {
+      iceServers: iceServers,
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: 'relay', // Force using TURN servers only
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      sdpSemantics: 'unified-plan'
+    };
+  } catch (error) {
+    console.error('Error getting relay configuration:', error);
+    
+    // Fallback configuration
+    return {
+      iceServers: STATIC_METERED_TURN_SERVERS,
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: 'relay',
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      sdpSemantics: 'unified-plan'
+    };
+  }
 };
 
 /**
@@ -98,15 +173,22 @@ export const getRelayOnlyConfig = () => {
  * @returns {Promise<{success: boolean, relayWorks: boolean}>}
  */
 export const testTurnServerConnectivity = async () => {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     console.log('Testing TURN server connectivity...');
     
-    // Get a standard configuration with multiple TURN servers
+    // Get credentials for testing
+    let iceServers;
+    try {
+      iceServers = await getTurnCredentials();
+    } catch (error) {
+      console.error('Error getting TURN credentials for testing:', error);
+      iceServers = STATIC_METERED_TURN_SERVERS;
+    }
+    
+    // Get a testing configuration
     const config = {
       iceServers: [
-        METERED_TURN_SERVERS, 
-        GOOGLE_TURN_SERVERS,
-        WEBRTC_ORG_TURN_SERVERS,
+        ...iceServers,
         ...STUN_SERVERS
       ],
       iceCandidatePoolSize: 10
