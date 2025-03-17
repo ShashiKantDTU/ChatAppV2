@@ -825,11 +825,15 @@ io.on('connection', (socket) => {
                 sdp: answer.sdp
             };
 
+            // Add a timestamp to prevent duplicate processing on the client side
+            const timestamp = Date.now();
+            
             console.log('Sending formatted answer:', formattedAnswer);
             
             io.to(callingUser.socketid).emit('call-answered', {
                 answer: formattedAnswer,
-                from: from // Include the answerer's ID
+                from: from, // Include the answerer's ID
+                timestamp: timestamp // Add timestamp to identify unique answers
             });
         } catch (error) {
             console.error('Error in call-answered handler:', error);

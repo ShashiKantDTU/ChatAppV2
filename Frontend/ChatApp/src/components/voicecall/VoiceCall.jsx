@@ -39,6 +39,9 @@ const VoiceCall = ({
     const remoteAudioRef = useRef(null);
     const connectionTimeoutRef = useRef(null);
     
+    // Add answer timestamp tracking to prevent duplicates
+    const lastAnswerTimestampRef = useRef(0);
+    
     // Initialize storedOffer when initialOffer changes
     useEffect(() => {
         if (initialOffer && callType === 'incoming') {
@@ -475,7 +478,18 @@ const VoiceCall = ({
     const handleAnswer = async (data) => {
         try {
             console.log('Received answer:', data);
-            const { answer } = data;
+            const { answer, timestamp } = data;
+            
+            // Check if this is a duplicate answer (using timestamp if available)
+            if (timestamp && lastAnswerTimestampRef.current >= timestamp) {
+                console.log('Ignoring duplicate answer with older or same timestamp');
+                return;
+            }
+            
+            // Update last answer timestamp
+            if (timestamp) {
+                lastAnswerTimestampRef.current = timestamp;
+            }
             
             if (!answer?.sdp) {
                 throw new Error('Invalid answer format');
@@ -483,6 +497,12 @@ const VoiceCall = ({
             
             if (!peerConnectionRef.current) {
                 throw new Error('No active peer connection');
+            }
+            
+            // Check connection state to avoid errors
+            if (peerConnectionRef.current.signalingState === 'stable') {
+                console.log('Connection already stable, ignoring additional answer');
+                return;
             }
             
             // Format answer

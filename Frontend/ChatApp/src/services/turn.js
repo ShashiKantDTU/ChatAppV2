@@ -12,7 +12,7 @@ const STUN_SERVERS = [
   { urls: 'stun:stun2.l.google.com:19302' }
 ];
 
-// Metered.ca free TURN servers
+// Metered.ca free TURN servers - The most reliable free option
 const METERED_TURN_SERVERS = {
   urls: [
     'turn:openrelay.metered.ca:443?transport=tcp',
@@ -24,14 +24,26 @@ const METERED_TURN_SERVERS = {
   credential: 'openrelayproject'
 };
 
-// Backup TURN servers from Twilio (reliable free tier)
-const TWILIO_TURN_SERVERS = {
+// Backup Google TURN servers
+const GOOGLE_TURN_SERVERS = {
   urls: [
-    'turn:global.turn.twilio.com:3478?transport=udp',
-    'turn:global.turn.twilio.com:3478?transport=tcp'
+    'turn:66.96.239.203:3478?transport=udp',
+    'turn:66.96.239.203:3478?transport=tcp',
+    'turn:66.96.239.203:443?transport=tcp'
   ],
-  username: 'f4b4035eaa76f4a55de5f4351a0e5378408e5a9cfc46a4d50cbf6038b0412870',
-  credential: 'myL7C5qT8Acj7/lV40S5IvJhkfJdY3Sa5WqXWjZzgQQ='
+  username: 'openrelayproject',
+  credential: 'openrelayproject'
+};
+
+// WebRTC.org free TURN servers for backup
+const WEBRTC_ORG_TURN_SERVERS = {
+  urls: [
+    'turn:turn.webrtc.org:3478?transport=udp',
+    'turn:turn.webrtc.org:3478?transport=tcp',
+    'turn:turn.webrtc.org:443?transport=tcp'
+  ],
+  username: 'webrtc',
+  credential: 'webrtc'
 };
 
 /**
@@ -45,7 +57,8 @@ export const getTurnServerConfig = () => {
       // Primary TURN servers
       METERED_TURN_SERVERS,
       // Backup TURN servers
-      TWILIO_TURN_SERVERS,
+      GOOGLE_TURN_SERVERS,
+      WEBRTC_ORG_TURN_SERVERS,
       // STUN servers
       ...STUN_SERVERS
     ],
@@ -69,7 +82,8 @@ export const getRelayOnlyConfig = () => {
       // Primary TURN servers
       METERED_TURN_SERVERS,
       // Backup TURN servers
-      TWILIO_TURN_SERVERS
+      GOOGLE_TURN_SERVERS,
+      WEBRTC_ORG_TURN_SERVERS
     ],
     iceCandidatePoolSize: 10,
     iceTransportPolicy: 'relay', // Force using TURN servers only
@@ -87,9 +101,14 @@ export const testTurnServerConnectivity = async () => {
   return new Promise((resolve) => {
     console.log('Testing TURN server connectivity...');
     
-    // Get a standard configuration with all TURN servers
+    // Get a standard configuration with multiple TURN servers
     const config = {
-      iceServers: [METERED_TURN_SERVERS, TWILIO_TURN_SERVERS, ...STUN_SERVERS],
+      iceServers: [
+        METERED_TURN_SERVERS, 
+        GOOGLE_TURN_SERVERS,
+        WEBRTC_ORG_TURN_SERVERS,
+        ...STUN_SERVERS
+      ],
       iceCandidatePoolSize: 10
     };
     
@@ -98,7 +117,7 @@ export const testTurnServerConnectivity = async () => {
     let foundStun = false;
     let foundTurn = false;
     
-    // Set a timeout for the test (10 seconds)
+    // Set a timeout for the test (15 seconds)
     const timeout = setTimeout(() => {
       console.warn('ICE gathering timed out - partial results');
       pc.close();
@@ -106,7 +125,7 @@ export const testTurnServerConnectivity = async () => {
         success: foundStun, 
         relayWorks: foundTurn 
       });
-    }, 10000);
+    }, 15000);
     
     // Create a data channel to trigger ICE gathering
     pc.createDataChannel('turnTestChannel');
@@ -125,6 +144,14 @@ export const testTurnServerConnectivity = async () => {
       } else if (candidate.includes('typ relay')) {
         console.log('✓ TURN/relay candidate found - TURN servers working');
         foundTurn = true;
+        
+        // Since we found a relay candidate, we can resolve early
+        clearTimeout(timeout);
+        pc.close();
+        resolve({ 
+          success: true, 
+          relayWorks: true 
+        });
       }
     };
     
