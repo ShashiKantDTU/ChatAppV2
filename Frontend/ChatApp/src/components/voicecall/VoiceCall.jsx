@@ -242,7 +242,8 @@ const VoiceCall = ({
                     // Make sure we're sending the full candidate information
                     socket.emit('ice-candidate', {
                         candidate: event.candidate,
-                        to: remoteUser.uid
+                        to: remoteUser.uid,
+                        from: localUser.uid
                     });
                 } else if (!event.candidate) {
                     console.log('ICE candidate gathering complete');
@@ -506,10 +507,16 @@ const VoiceCall = ({
         console.log('Setting up socket event listeners for call handling');
         
         // Handle remote ICE candidates
-        const handleIceCandidate = async ({ candidate }) => {
+        const handleIceCandidate = async ({ candidate, from }) => {
             try {
+                // Ignore ICE candidates from ourselves
+                if (from === localUser.uid) {
+                    console.log('Ignoring ICE candidate from self');
+                    return;
+                }
+                
                 if (peerConnectionRef.current && candidate) {
-                    console.log('Received ICE candidate');
+                    console.log('Received ICE candidate from:', from);
                     
                     if (peerConnectionRef.current.remoteDescription === null) {
                         // Queue the candidate if remote description not set yet
@@ -583,7 +590,7 @@ const VoiceCall = ({
             socket.off('call-ended', handleCallEnded);
             socket.off('call-failed', handleCallFailed);
         };
-    }, [isOpen, socket, onClose]);
+    }, [isOpen, socket, onClose, localUser.uid]);
     
     // Handle call status changes to update UI
     useEffect(() => {
