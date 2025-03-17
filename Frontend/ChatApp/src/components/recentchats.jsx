@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import styles from "./recentchats.module.css"; // Import CSS as a module
 import ProfileHeader from "./profileheader";
 import EditProfileModal from "./EditProfileModal";
+import RecentChatsSkeleton from "./Loading/RecentChatsSkeleton";
 
 const RecentChats = (props) => {
   const [user, setUser] = useState({}); // User object
@@ -10,6 +11,7 @@ const RecentChats = (props) => {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, chatId: null });
+  const [isLoading, setIsLoading] = useState(true);
 
   // Move the click outside handler useEffect here with other hooks
   useEffect(() => {
@@ -23,6 +25,12 @@ const RecentChats = (props) => {
 
   useEffect(() => {  
     setUser(prev => ({ ...prev, ...props.user }));
+    
+    // Simulate loading state
+    if (props.user && props.user.chats) {
+      // Set loading to false once we have the chats data
+      setIsLoading(false);
+    }
   }, [props.user]);
 
   useEffect(() => {
@@ -37,12 +45,9 @@ const RecentChats = (props) => {
 
   const notifications = props.notifications; // Number of notifications
 
-  if (!user.chats) {
-    return <>
-      <div className={styles.loadingContainer}></div>
-      <div className={styles.loadingSpinner}></div>
-      <p>Loading chats...</p>
-    </>;
+  // Display skeleton UI when loading or when chats aren't available yet
+  if (isLoading || !user.chats) {
+    return <RecentChatsSkeleton />;
   }
 
   const chats = user.chats; // Array of chat objects
