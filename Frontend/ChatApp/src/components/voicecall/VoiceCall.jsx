@@ -32,9 +32,21 @@ const VoiceCall = ({
     useEffect(() => {
         if (initialOffer && callType === 'incoming') {
             console.log('Received initial offer:', initialOffer);
-            setStoredOffer(initialOffer);
+            // Check if initialOffer has the from field
+            if (!initialOffer.from) {
+                console.warn('Initial offer missing from field:', initialOffer);
+                // If remoteUser is available, try to use its uid as fallback
+                if (remoteUser?.uid) {
+                    console.log('Using remoteUser.uid as fallback for from field');
+                    setStoredOffer({ ...initialOffer, from: remoteUser.uid });
+                } else {
+                    setStoredOffer(initialOffer);
+                }
+            } else {
+                setStoredOffer(initialOffer);
+            }
         }
-    }, [initialOffer, callType]);
+    }, [initialOffer, callType, remoteUser?.uid]);
 
     // Debug log for component mount and props
     useEffect(() => {
@@ -54,9 +66,10 @@ const VoiceCall = ({
                 if (from === remoteUser?.uid && offer?.sdp) {
                     const formattedOffer = {
                         type: 'offer',
-                        sdp: offer.sdp
+                        sdp: offer.sdp,
+                        from: from  // Ensure 'from' is included in the stored offer
                     };
-                    console.log('Storing formatted offer:', formattedOffer);
+                    console.log('Storing formatted offer with from:', formattedOffer);
                     setStoredOffer(formattedOffer);
                 }
             };
@@ -327,6 +340,19 @@ const VoiceCall = ({
                 console.error('No offer available for incoming call');
                 setError('Call setup failed - missing offer');
                 return;
+            }
+
+            // Check if we have the caller ID
+            if (!storedOffer.from) {
+                console.error('Offer missing from field (caller ID)');
+                // Try to use remoteUser as a fallback
+                if (remoteUser?.uid) {
+                    console.log('Using remoteUser.uid as fallback for caller ID');
+                    storedOffer.from = remoteUser.uid;
+                } else {
+                    setError('Call setup failed - unknown caller');
+                    return;
+                }
             }
 
             await initializeCall(false);
