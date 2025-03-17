@@ -3,6 +3,7 @@ import { User, Lock, Eye, EyeOff } from "lucide-react";
 import "./login.css";
 import { useNavigate, useLocation } from "react-router-dom";
 import GoogleAuth from '../components/GoogleAuth';
+import Authloading from '../components/Loading/Authloading';
 
 const DarkLoginForm = () => {
     const navigate = useNavigate();
@@ -17,6 +18,7 @@ const DarkLoginForm = () => {
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
     const [authMessage, setAuthMessage] = useState(null);
+    const [showAuthLoading, setShowAuthLoading] = useState(false);
 
     // Check URL for token from Google OAuth redirect
     useEffect(() => {
@@ -75,6 +77,8 @@ const DarkLoginForm = () => {
         if (validateForm()) {
             setIsLoading(true);
             setErrors({});
+            // Show the AuthLoading component
+            setShowAuthLoading(true);
 
             try {
                 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -110,12 +114,16 @@ const DarkLoginForm = () => {
                     
                     navigate('/'); // Redirect to home page
                 } else {
+                    // Hide the AuthLoading component on error
+                    setShowAuthLoading(false);
                     setErrors({
                         [data.message.includes('email') ? 'email' : 'password']: data.message
                     });
                 }
             } catch (error) {
                 console.error("Login error:", error);
+                // Hide the AuthLoading component on error
+                setShowAuthLoading(false);
                 setErrors({
                     email: error.message || 'An error occurred during login'
                 });
@@ -136,6 +144,11 @@ const DarkLoginForm = () => {
     const togglePasswordVisibility = () => {
         setShowPassword(!showPassword);
     };
+
+    // If authentication is in progress, show the AuthLoading component
+    if (showAuthLoading) {
+        return <Authloading />;
+    }
 
     return (
         <div className="modern-login-container">
