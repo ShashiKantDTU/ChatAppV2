@@ -677,7 +677,7 @@ const VoiceCall = ({
     // Create and send an offer for an outgoing call
     const makeCall = async () => {
         try {
-            console.log('Initiating outgoing call to:', remoteUser?.username || 'User');
+            console.log('Initiating outgoing call to:', remoteUser?.name || 'User');
             
             // Check if remoteUser is available
             if (!remoteUser?.uid) {
@@ -777,15 +777,15 @@ const VoiceCall = ({
                 
                 <div className={styles.userInfo}>
                     <div className={styles.avatar}>
-                        {remoteUser.profilePicture ? (
-                            <img src={remoteUser.profilePicture} alt={remoteUser.username} />
+                        {remoteUser.profilepicture ? (
+                            <img src={remoteUser.profilepicture} alt={remoteUser.name || 'User'} />
                         ) : (
                             <div className={styles.defaultAvatar}>
-                                {remoteUser.username ? remoteUser.username.charAt(0).toUpperCase() : '?'}
+                                {remoteUser.name ? remoteUser.name.charAt(0).toUpperCase() : '?'}
                             </div>
                         )}
                     </div>
-                    <div className={styles.username}>{remoteUser.username || 'User'}</div>
+                    <div className={styles.username}>{remoteUser.name || 'User'}</div>
                 </div>
                 
                 {/* Hidden audio elements for streams */}
@@ -797,9 +797,9 @@ const VoiceCall = ({
                         <>
                             <div className={styles.callDetails}>
                                 {callType === 'incoming' ? (
-                                    <span>Incoming call from {remoteUser?.username || 'User'}</span>
+                                    <span>Incoming call from {remoteUser?.name || 'User'}</span>
                                 ) : (
-                                    <span>Call {remoteUser?.username || 'User'}</span>
+                                    <span>Call {remoteUser?.name || 'User'}</span>
                                 )}
                             </div>
                             <div className={styles.buttons}>
@@ -833,7 +833,7 @@ const VoiceCall = ({
                     {callStatus === 'calling' && (
                         <>
                             <div className={styles.callDetails}>
-                                <span>Calling {remoteUser?.username || 'User'}...</span>
+                                <span>Calling {remoteUser?.name || 'User'}...</span>
                             </div>
                             <div className={styles.buttons}>
                                 <button 
@@ -849,7 +849,7 @@ const VoiceCall = ({
                     {callStatus === 'incoming' && (
                         <>
                             <div className={styles.callDetails}>
-                                <span>Incoming call from {remoteUser?.username || 'User'}</span>
+                                <span>Incoming call from {remoteUser?.name || 'User'}</span>
                             </div>
                             <div className={styles.buttons}>
                                 <button 
@@ -887,7 +887,7 @@ const VoiceCall = ({
                     {callStatus === 'ongoing' && (
                         <>
                             <div className={styles.callDetails}>
-                                <span>In call with {remoteUser?.username || 'User'}</span>
+                                <span>In call with {remoteUser?.name || 'User'}</span>
                                 <span className={styles.duration}>{formatDuration(callDuration)}</span>
                             </div>
                             <div className={styles.buttons}>
