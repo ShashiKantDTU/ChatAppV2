@@ -256,12 +256,88 @@ const Call = ({
         };
     };
     
+    // Set up socket event handlers
+    useEffect(() => {
+        if (!socket || !isOpen) return;
+        
+        console.log('Setting up socket event listeners');
+        
+        // Handle incoming ICE candidates
+        socket.on('ice-candidate', handleIceCandidate);
+        
+        // Handle call answered
+        socket.on('call-answered', (data) => {
+            console.log('Received call answer:', data);
+            handleAnswer(data);
+        });
+        
+        // Handle incoming call
+        socket.on('incoming-call', (data) => {
+            console.log('Received incoming call:', data);
+            if (data.offer) {
+                setStoredOffer(data.offer);
+            }
+        });
+        
+        // Handle call ended by remote user
+        socket.on('call-ended', () => {
+            console.log('Call ended by remote user');
+            cleanup();
+            onClose();
+        });
+        
+        // Handle call rejected
+        socket.on('call-rejected', () => {
+            console.log('Call rejected by remote user');
+            setError('Call rejected');
+            cleanup();
+            onClose();
+        });
+        
+        return () => {
+            console.log('Cleaning up socket listeners');
+            socket.off('ice-candidate', handleIceCandidate);
+            socket.off('call-answered');
+            socket.off('incoming-call');
+            socket.off('call-ended');
+            socket.off('call-rejected');
+        };
+    }, [isOpen, socket, localUser?.uid]);
+    
     // Start an outgoing call
     const startCall = async () => {
         try {
             console.log('Starting outgoing call');
             setCallStatus('calling');
-            await initializeCall(true);
+            
+            // Create and initialize peer connection
+            const peerConnection = await initializeCall(true);
+            if (!peerConnection) {
+                throw new Error('Failed to create peer connection');
+            }
+            
+            // Create and set local description
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            console.log('Created and set local offer:', offer);
+            
+            // Send call offer to remote user
+            if (socket && remoteUser?.uid) {
+                console.log('Sending call offer to:', remoteUser.uid);
+                socket.emit('call-user', {
+                    userToCall: remoteUser.uid,
+                    from: localUser.uid,
+                    offer: {
+                        type: offer.type,
+                        sdp: offer.sdp
+                    }
+                });
+            } else {
+                throw new Error('Socket or remote user not available');
+            }
+            
+            setCallStatus('calling');
         } catch (error) {
             console.error('Error starting call:', error);
             setError(`Call failed: ${error.message || 'Connection error'}`);
@@ -269,57 +345,10 @@ const Call = ({
         }
     };
     
-    // Handle an incoming call
-    const handleIncomingCall = async () => {
-        try {
-            console.log('Handling incoming call', storedOffer);
-            setCallStatus('connecting');
-            
-            if (!storedOffer) {
-                throw new Error('No offer available for incoming call');
-            }
-            
-            const peerConnection = await initializeCall(false);
-            
-            if (!peerConnection) {
-                throw new Error('Failed to create peer connection');
-            }
-            
-            // Set remote description from offer
-            console.log('Setting remote description from offer');
-            await peerConnection.setRemoteDescription(
-                new RTCSessionDescription(storedOffer)
-            );
-            
-            // Process any queued candidates
-            await processQueuedCandidates();
-            
-            // Create and send answer
-            console.log('Creating answer');
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            
-            console.log('Sending answer to caller:', storedOffer.from);
-            socket.emit('call-answered', {
-                answer: {
-                    type: answer.type,
-                    sdp: answer.sdp
-                },
-                to: storedOffer.from
-            });
-            
-            console.log('Answer sent, waiting for connection');
-        } catch (error) {
-            console.error('Error handling incoming call:', error);
-            setError(`Failed to answer call: ${error.message || 'Connection error'}`);
-            setCallStatus('ended');
-        }
-    };
-    
     // Handle incoming answer for outgoing call
     const handleAnswer = async (data) => {
         try {
-            console.log('Received answer:', data);
+            console.log('Handling call answer:', data);
             const { answer } = data;
             
             if (!answer?.sdp) {
@@ -336,6 +365,7 @@ const Call = ({
                 sdp: answer.sdp
             };
             
+            console.log('Setting remote description from answer');
             // Set remote description
             await peerConnectionRef.current.setRemoteDescription(
                 new RTCSessionDescription(formattedAnswer)
@@ -559,42 +589,6 @@ const Call = ({
         // Reset state
         setCallStatus('ended');
     };
-    
-    // Set up socket event handlers
-    useEffect(() => {
-        if (!socket || !isOpen) return;
-        
-        console.log('Setting up socket event listeners');
-        
-        // Handle incoming ICE candidates
-        socket.on('ice-candidate', handleIceCandidate);
-        
-        // Handle call answered
-        socket.on('call-answered', handleAnswer);
-        
-        // Handle call ended by remote user
-        socket.on('call-ended', () => {
-            console.log('Call ended by remote user');
-            cleanup();
-            onClose();
-        });
-        
-        // Handle call rejected
-        socket.on('call-rejected', () => {
-            console.log('Call rejected by remote user');
-            setError('Call rejected');
-            cleanup();
-            onClose();
-        });
-        
-        return () => {
-            console.log('Cleaning up socket listeners');
-            socket.off('ice-candidate', handleIceCandidate);
-            socket.off('call-answered', handleAnswer);
-            socket.off('call-ended');
-            socket.off('call-rejected');
-        };
-    }, [isOpen, socket, localUser?.uid]);
     
     // Clean up on unmount
     useEffect(() => {
