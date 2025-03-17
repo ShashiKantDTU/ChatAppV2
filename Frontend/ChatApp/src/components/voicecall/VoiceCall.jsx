@@ -3,6 +3,10 @@ import styles from './VoiceCall.module.css';
 import { FiPhoneCall as PhoneCallIcon, FiPhoneOff as PhoneOffIcon, FiMic as MicIcon, FiMicOff as MicOffIcon, FiRefreshCw as RefreshIcon } from 'react-icons/fi';
 import { getTurnServerConfig, getRelayOnlyConfig, testTurnServerConnectivity } from '../../services/turn';
 
+// Connection timeout constants
+const INITIAL_CONNECTION_TIMEOUT = 12000; // 12 seconds initial timeout
+const EXTENDED_CONNECTION_TIMEOUT = 20000; // 20 seconds for retry with forced relay
+
 const VoiceCall = ({ 
     isOpen, 
     onClose, 
@@ -19,6 +23,11 @@ const VoiceCall = ({
     const [error, setError] = useState('');
     const [storedOffer, setStoredOffer] = useState(initialOffer);
     const [isRetrying, setIsRetrying] = useState(false);
+    const [showDebugInfo, setShowDebugInfo] = useState(false);
+    const [debugInfo, setDebugInfo] = useState({
+        iceState: 'unknown',
+        candidateTypes: { host: 0, srflx: 0, relay: 0 }
+    });
     
     // Refs
     const peerConnectionRef = useRef(null);
@@ -29,9 +38,6 @@ const VoiceCall = ({
     const localAudioRef = useRef(null);
     const remoteAudioRef = useRef(null);
     const connectionTimeoutRef = useRef(null);
-    
-    // Constants
-    const CONNECTION_TIMEOUT = 12000; // 12 seconds
     
     // Initialize storedOffer when initialOffer changes
     useEffect(() => {
@@ -94,6 +100,24 @@ const VoiceCall = ({
         }
     }, [socket, remoteUser, localUser]);
     
+    // Helper function to update debug info
+    const updateDebugInfo = (candidateType) => {
+        if (!candidateType) return;
+        
+        setDebugInfo(prev => {
+            const updatedCandidates = { ...prev.candidateTypes };
+            
+            if (candidateType === 'host') updatedCandidates.host++;
+            if (candidateType === 'srflx') updatedCandidates.srflx++; 
+            if (candidateType === 'relay') updatedCandidates.relay++;
+            
+            return {
+                ...prev,
+                candidateTypes: updatedCandidates
+            };
+        });
+    };
+    
     // Main call initialization logic
     const initializeCall = async (isOutgoing, forceRelay = false) => {
         try {
@@ -102,10 +126,14 @@ const VoiceCall = ({
             // Clean up any existing connection first
             cleanupPeerConnection();
             
-            // Reset ICE candidates queue
+            // Reset ICE candidates queue and debug info
             iceCandidatesQueue.current = [];
+            setDebugInfo({
+                iceState: 'new',
+                candidateTypes: { host: 0, srflx: 0, relay: 0 }
+            });
             
-            // Get Metered.ca TURN config
+            // Get TURN config based on mode
             const config = forceRelay ? getRelayOnlyConfig() : getTurnServerConfig();
             console.log('Using WebRTC configuration:', config);
             
@@ -139,6 +167,19 @@ const VoiceCall = ({
             // Set up event handlers
             setupPeerConnectionEventHandlers(peerConnection);
             
+            // Set connection timeout based on mode
+            const timeoutDuration = forceRelay ? 
+                EXTENDED_CONNECTION_TIMEOUT : INITIAL_CONNECTION_TIMEOUT;
+                
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = setTimeout(() => {
+                if (peerConnectionRef.current?.iceConnectionState !== 'connected' &&
+                    peerConnectionRef.current?.iceConnectionState !== 'completed') {
+                    console.log(`Connection attempt timed out after ${timeoutDuration/1000}s`);
+                    handleConnectionTimeout(forceRelay);
+                }
+            }, timeoutDuration);
+            
             // For outgoing calls, create and send offer
             if (isOutgoing) {
                 const offer = await peerConnection.createOffer();
@@ -168,6 +209,31 @@ const VoiceCall = ({
         }
     };
     
+    // Handle connection timeout
+    const handleConnectionTimeout = (wasUsingRelay) => {
+        // If already retrying or already ended, don't do anything
+        if (callStatus === 'ended') return;
+        
+        if (!wasUsingRelay && !isRetrying) {
+            console.log('Connection timeout - retrying with forced relay mode');
+            setError('Connection taking too long. Trying more reliable mode...');
+            setIsRetrying(true);
+            
+            // Re-initialize with forced relay
+            cleanupPeerConnection();
+            if (callType === 'outgoing') {
+                initializeCall(true, true);
+            } else {
+                handleIncomingCall(true);
+            }
+        } else {
+            // Already tried relay mode or already retrying
+            console.log('Connection failed after timeout with relay mode');
+            setError('Could not establish connection. Please check your network or try again later.');
+            setCallStatus('ended');
+        }
+    };
+    
     // Set up all event handlers for peer connection
     const setupPeerConnectionEventHandlers = (peerConnection) => {
         // Track event - receiving remote media
@@ -191,9 +257,18 @@ const VoiceCall = ({
                 return;
             }
             
+            // Extract candidate type for debug info
+            const candidateStr = event.candidate.candidate;
+            let candidateType = 'unknown';
+            if (candidateStr.includes(' host ')) candidateType = 'host';
+            else if (candidateStr.includes(' srflx ')) candidateType = 'srflx';
+            else if (candidateStr.includes(' relay ')) candidateType = 'relay';
+            
+            // Update debug info
+            updateDebugInfo(candidateType);
+            
             // Log candidate type for debugging
-            const candidateType = event.candidate.candidate.split(' ')[7]; // host, srflx, or relay
-            console.log(`Generated ICE candidate (${candidateType}):`, event.candidate);
+            console.log(`Generated ICE candidate (${candidateType}):`);
             
             if (socket && remoteUser?.uid) {
                 try {
@@ -267,31 +342,11 @@ const VoiceCall = ({
             const state = peerConnection.iceConnectionState;
             console.log('ICE connection state changed:', state);
             
+            // Update debug info
+            setDebugInfo(prev => ({ ...prev, iceState: state }));
+            
             if (state === 'checking') {
-                // Set timeout for connection attempt
-                clearTimeout(connectionTimeoutRef.current);
-                connectionTimeoutRef.current = setTimeout(() => {
-                    if (peerConnectionRef.current?.iceConnectionState === 'checking') {
-                        console.log('Connection attempt timed out');
-                        setError('Connection attempt timed out. Try again or check your network.');
-                        
-                        // Retry with forced relay if not already retrying
-                        if (!isRetrying) {
-                            console.log('Retrying with forced TURN relay');
-                            setIsRetrying(true);
-                            
-                            // Re-initialize with forced relay
-                            cleanupPeerConnection();
-                            if (callType === 'outgoing') {
-                                initializeCall(true, true);
-                            } else {
-                                handleIncomingCall(true);
-                            }
-                        } else {
-                            setCallStatus('ended');
-                        }
-                    }
-                }, CONNECTION_TIMEOUT);
+                // The timeout is now set in initializeCall
             } 
             else if (state === 'connected' || state === 'completed') {
                 clearTimeout(connectionTimeoutRef.current);
@@ -468,9 +523,9 @@ const VoiceCall = ({
         for (const candidate of candidates) {
             try {
                 if (peerConnectionRef.current.remoteDescription) {
-                    await peerConnectionRef.current.addIceCandidate(
-                        new RTCIceCandidate(candidate)
-                    );
+                await peerConnectionRef.current.addIceCandidate(
+                    new RTCIceCandidate(candidate)
+                );
                     console.log('Added queued ICE candidate');
                 } else {
                     console.warn('Remote description not set, re-queuing candidate');
@@ -584,7 +639,7 @@ const VoiceCall = ({
             console.error('Error handling ICE candidate:', error);
         }
     };
-    
+
     // Start call timer
     const startTimer = () => {
         // Clear existing timer if any
@@ -599,14 +654,14 @@ const VoiceCall = ({
             setCallDuration(prev => prev + 1);
         }, 1000);
     };
-    
+
     // Format call duration
     const formatDuration = (seconds) => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
-    
+
     // Toggle mute
     const toggleMute = () => {
         if (!localStreamRef.current) return;
@@ -651,7 +706,7 @@ const VoiceCall = ({
         cleanup();
         onClose();
     };
-    
+
     // Handle media errors
     const handleMediaError = (error) => {
         console.error('Media error:', error);
@@ -673,7 +728,7 @@ const VoiceCall = ({
     const cleanupPeerConnection = () => {
         if (peerConnectionRef.current) {
             try {
-                peerConnectionRef.current.close();
+            peerConnectionRef.current.close();
             } catch (error) {
                 console.error('Error closing peer connection:', error);
             }
@@ -714,9 +769,9 @@ const VoiceCall = ({
         if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = null;
         }
-        
+
         // Reset state
-        setCallStatus('ended');
+            setCallStatus('ended');
         remoteStreamRef.current = null;
         setStoredOffer(null);
         setIsRetrying(false);
@@ -750,17 +805,17 @@ const VoiceCall = ({
         
         // Handle call ended by remote user
         socket.on('call-ended', () => {
-            console.log('Call ended by remote user');
+                console.log('Call ended by remote user');
             setError('Call ended by remote user');
-            cleanup();
-            onClose();
+                cleanup();
+                onClose();
         });
         
         // Handle call failed
         socket.on('call-failed', ({ error: callError }) => {
             console.log('Call failed:', callError);
             setError(callError || 'Call failed');
-            setCallStatus('ended');
+                setCallStatus('ended');
         });
         
         // Handle call rejected
@@ -790,7 +845,7 @@ const VoiceCall = ({
     
     // Don't render anything if not open
     if (!isOpen) return null;
-    
+
     return (
         <div className={styles.voiceCallContainer}>
             <div className={styles.voiceCallModal}>
@@ -874,12 +929,12 @@ const VoiceCall = ({
                                 >
                                     <PhoneOffIcon />
                                 </button>
-                                <button 
-                                    className={`${styles.callButton} ${styles.acceptButton}`}
+                            <button 
+                                className={`${styles.callButton} ${styles.acceptButton}`} 
                                     onClick={() => handleIncomingCall()}
-                                >
-                                    <PhoneCallIcon />
-                                </button>
+                            >
+                                <PhoneCallIcon />
+                            </button>
                             </div>
                         </>
                     )}
@@ -891,12 +946,12 @@ const VoiceCall = ({
                                 <span>Connecting...</span>
                             </div>
                             <div className={styles.buttons}>
-                                <button 
+                            <button 
                                     className={`${styles.callButton} ${styles.endButton}`}
-                                    onClick={endCall}
-                                >
+                                onClick={endCall}
+                            >
                                     <PhoneOffIcon />
-                                </button>
+                            </button>
                             </div>
                         </>
                     )}
@@ -909,16 +964,16 @@ const VoiceCall = ({
                                 <span className={styles.duration}>{formatDuration(callDuration)}</span>
                             </div>
                             <div className={styles.buttons}>
-                                <button 
-                                    className={`${styles.callButton} ${isMuted ? styles.active : ''}`}
-                                    onClick={toggleMute}
-                                >
+                            <button 
+                                className={`${styles.callButton} ${isMuted ? styles.active : ''}`} 
+                                onClick={toggleMute}
+                            >
                                     {isMuted ? <MicOffIcon /> : <MicIcon />}
-                                </button>
-                                <button 
-                                    className={`${styles.callButton} ${styles.endButton}`}
-                                    onClick={endCall}
-                                >
+                            </button>
+                            <button 
+                                className={`${styles.callButton} ${styles.endButton}`} 
+                                onClick={endCall}
+                            >
                                     <PhoneOffIcon />
                                 </button>
                             </div>
@@ -960,7 +1015,7 @@ const VoiceCall = ({
                                     onClick={onClose}
                                 >
                                     <PhoneOffIcon />
-                                </button>
+                            </button>
                             </div>
                         </>
                     )}
