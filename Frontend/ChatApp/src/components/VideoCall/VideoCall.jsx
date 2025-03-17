@@ -279,22 +279,37 @@ const VideoCall = ({
   // Initialize when component mounts
   useEffect(() => {
     if (isOpen) {
+      console.log(`Call component opened - callType: ${callType}, isIncoming: ${isIncoming}`);
+      
       // Ensure the audio/video state is set correctly based on current callType
       setIsAudioOnly(callType === 'audio');
       setIsVideoEnabled(callType === 'video');
       
       if (isIncoming) {
         // Ready to accept incoming call
+        console.log('Waiting for user to accept incoming call');
         setIsLoading(false);
+        
+        // Start playing ringtone
+        if (ringtoneRef.current) {
+          ringtoneRef.current.currentTime = 0;
+          ringtoneRef.current.play().catch(err => 
+            console.warn('Could not play ringtone:', err)
+          );
+        }
       } else {
         // Start outgoing call, but only after ICE servers are ready
         const initializeCallWithIceServers = async () => {
+          console.log('Preparing to initialize outgoing call');
+          
           // Wait for ICE servers to be ready or timeout after 3 seconds
           let attempts = 0;
           while (!areIceServersReady && attempts < 30) {
             await new Promise(resolve => setTimeout(resolve, 100));
             attempts++;
           }
+          
+          console.log('ICE servers ready, initializing call');
           
           // Proceed with call initialization
           await initializeCall();
@@ -305,6 +320,7 @@ const VideoCall = ({
     }
     
     return () => {
+      console.log('Call component closing - cleaning up');
       cleanupCall();
     };
   }, [isOpen, areIceServersReady, callType]);
@@ -375,42 +391,53 @@ const VideoCall = ({
       // Get local media stream based on call type and optimized constraints
       console.log(`Setting up media with callType=${callType}, isAudioOnly=${currentIsAudioOnly}`);
       
-      // For video, make sure to include both front and back cameras for mobile devices
-      const videoConstraints = !currentIsAudioOnly ? {
-        width: { ideal: idealWidth, max: idealWidth * 1.5 },
-        height: { ideal: idealHeight, max: idealHeight * 1.5 },
-        frameRate: { max: maxFrameRate },
-        // Don't specify facingMode to let browser pick the best default camera
-        // (some browsers have issues with exact facingMode constraints)
-      } : false;
+      // Simplify constraints for maximum compatibility
+      let mediaConstraints;
       
-      // Improve audio constraints for better cross-device compatibility
-      const audioConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        // Add these parameters for better audio quality
-        sampleRate: 48000,
-        channelCount: 2,
-        // Some mobile browsers work better with these constraints
-        latency: 0.01,
-        // Make sure we can access the microphone
-        mandatory: {
-          googEchoCancellation: true,
-          googAutoGainControl: true,
-          googNoiseSuppression: true,
+      if (currentIsAudioOnly) {
+        // For audio-only calls, use the simplest possible constraint
+        // This avoids compatibility issues across browsers
+        console.log('Using simple audio-only constraints');
+        mediaConstraints = {
+          audio: true,
+          video: false
+        };
+      } else {
+        // For video calls, progressive enhancement approach
+        console.log('Using video call constraints');
+        
+        // Start with simple constraints
+        mediaConstraints = {
+          audio: true,
+          video: {
+            width: { ideal: idealWidth },
+            height: { ideal: idealHeight }
+          }
+        };
+        
+        // For mobile, don't specify facingMode to avoid issues
+        if (!isMobileDevice) {
+          // On desktop, we can try more advanced constraints
+          try {
+            // Check if advanced constraints are supported
+            const supportCheck = await navigator.mediaDevices.getSupportedConstraints();
+            console.log('Supported constraints:', supportCheck);
+            
+            // Only add frameRate if supported
+            if (supportCheck.frameRate) {
+              mediaConstraints.video.frameRate = { max: maxFrameRate };
+            }
+          } catch (err) {
+            console.warn('Error checking supported constraints:', err);
+            // Fall back to basic constraints
+          }
         }
-      };
-
-      const mediaConstraints = {
-        audio: audioConstraints,
-        video: videoConstraints
-      };
+      }
       
-      console.log(`Requesting media with optimized constraints:`, JSON.stringify(mediaConstraints, null, 2));
+      console.log(`Requesting media with browser-compatible constraints:`, JSON.stringify(mediaConstraints, null, 2));
       
       try {
-        // First try with optimal constraints
+        // First try with these simplified constraints
         const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
         console.log('Got media stream with tracks:', 
                     stream.getTracks().map(t => `${t.kind} (${t.label}) enabled:${t.enabled}`));
@@ -453,6 +480,36 @@ const VideoCall = ({
         }
       } catch (mediaError) {
         console.error("Media access error:", mediaError.name, mediaError.message);
+        
+        // Special handling for audio-only calls with compatibility error
+        if (currentIsAudioOnly && (mediaError.name === "TypeError" || mediaError.message.includes("Malformed constraint"))) {
+          console.log("Constraint error detected for audio. Trying basic constraints.");
+          try {
+            // Fallback to absolutely basic audio constraint
+            const basicAudioStream = await navigator.mediaDevices.getUserMedia({ 
+              audio: true 
+            });
+            
+            console.log('Got basic audio stream');
+            localStreamRef.current = basicAudioStream;
+            setupAudioMonitoring(basicAudioStream);
+            
+            if (localVideoRef.current) {
+              localVideoRef.current.srcObject = basicAudioStream;
+            }
+            
+            setIsLoading(false);
+            
+            // If this is an outgoing call, start the call process
+            if (!isIncoming) {
+              startOutgoingCall();
+            }
+            return;
+          } catch (basicError) {
+            console.error("Even basic audio access failed:", basicError);
+            // Continue to general error handling
+          }
+        }
         
         // Handle specific media errors with appropriate feedback
         if (mediaError.name === "NotAllowedError") {
@@ -547,24 +604,54 @@ const VideoCall = ({
   
   // Start outgoing call
   const startOutgoingCall = () => {
-    if (!socket) return;
+    if (!socket) {
+      console.error('Cannot start call: socket not available');
+      setError('Connection to server not available. Please refresh and try again.');
+      return;
+    }
+    
+    if (!localUser || !localUser.uid) {
+      console.error('Cannot start call: local user information missing', localUser);
+      setError('Your user information is not available. Please refresh and try again.');
+      return;
+    }
+    
+    if (!callee || !callee.uid) {
+      console.error('Cannot start call: callee information missing', callee);
+      setError('Recipient information is not available. Please try again.');
+      return;
+    }
     
     // Use callType directly rather than the potentially stale isAudioOnly state
     const isAudioOnlyCall = callType === 'audio';
     
     console.log(`Starting outgoing call: callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
+    console.log('Call participants:', {
+      caller: {
+        uid: localUser.uid,
+        name: localUser.username || localUser.name
+      },
+      callee: {
+        uid: callee.uid,
+        name: callee.name || callee.username
+      }
+    });
     
     // Emit call-user event to server
     try {
       console.log(`Emitting call-user with callType: ${isAudioOnlyCall ? 'audio' : 'video'}`);
       
-      socket.emit('call-user', {
+      const callData = {
         callerId: localUser.uid,
         callerName: localUser.username || localUser.name,
         calleeId: callee.uid,
         callerProfilePic: localUser.profilepicture,
         callType: isAudioOnlyCall ? 'audio' : 'video'
-      });
+      };
+      
+      console.log('Emitting call-user with data:', callData);
+      
+      socket.emit('call-user', callData);
       
       // Listen for call-accepted event
       socket.once('call-accepted', async (data) => {
