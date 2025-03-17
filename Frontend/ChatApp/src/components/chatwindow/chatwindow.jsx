@@ -1,11 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import './chatwindow.css';
-import { Video, Check, Image, Paperclip, Send, X, AlertCircle, Upload, Mic, Square, File, FileText, FileCode, FileSpreadsheet, Presentation, FileArchive, Type, Play, Pause, Trash2, Download, ArrowDown, PhoneCall } from 'lucide-react';
+import { Video, Check, Image, Paperclip, Send, X, AlertCircle, Upload, Mic, Square, File, FileText, FileCode, FileSpreadsheet, Presentation, FileArchive, Type, Play, Pause, Trash2, Download, ArrowDown } from 'lucide-react';
 import Message from './message';
 import scrollToBottom from '../../../scripts/scrolltobottom';
 import TypingIndicator from './typingindicator';
 import formatChatTime from '../../../scripts/converttime';
-import Call from '../call/Call';
 
 // Hook to force component re-render
 const useForceUpdate = () => {
@@ -56,11 +55,6 @@ const ChatWindow = (props) => {
     const [imageDisplayMode, setImageDisplayMode] = useState('auto'); // 'contain', 'cover', or 'auto'
     const [imageLoaded, setImageLoaded] = useState(false);
     const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
-    
-    // Call related state
-    const [showCallModal, setShowCallModal] = useState(false);
-    const [callType, setCallType] = useState('outgoing'); // 'outgoing' or 'incoming'
-    const [incomingCallData, setIncomingCallData] = useState(null);
     
     // Call the hook to get forceUpdate function
     const forceUpdate = useForceUpdate();
@@ -162,35 +156,29 @@ const ChatWindow = (props) => {
         }
     }, [props.userdata?.messages?.length]);
 
-    // Add this function at the component level
-    const handleScroll = () => {
-        if (!chatAreaRef.current) return;
-        
-        const chatArea = chatAreaRef.current;
-        
-        // Check if user is near the bottom (within 100px)
-        const isScrolledNearBottom = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop <= 100;
-        
-        // Update the ref for use in other effects
-        isNearBottom.current = isScrolledNearBottom;
-        
-        // Show button when user has scrolled up at least 100px from bottom
-        const isScrolledUp = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop > 100;
-        setShowScrollButton(isScrolledUp);
-        
-        // If user scrolled to bottom, clear the new messages notification
-        if (isScrolledNearBottom) {
-            setHasNewMessages(false);
-            setUnreadCount(0);
-        }
-    };
-
     // Add scroll event listener to detect when user scrolls up
     useEffect(() => {
-        const chatArea = chatAreaRef.current;
+        const chatArea = document.getElementById('chatarea');
         if (!chatArea) return;
 
-        // Use the handleScroll function defined above
+        const handleScroll = () => {
+            // Check if user is near the bottom (within 100px)
+            const isScrolledNearBottom = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop <= 100;
+            
+            // Update the ref for use in other effects
+            isNearBottom.current = isScrolledNearBottom;
+            
+            // Show button when user has scrolled up at least 100px from bottom
+            const isScrolledUp = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop > 100;
+            setShowScrollButton(isScrolledUp);
+            
+            // If user scrolled to bottom, clear the new messages notification
+            if (isScrolledNearBottom) {
+                setHasNewMessages(false);
+                setUnreadCount(0);
+            }
+        };
+
         chatArea.addEventListener('scroll', handleScroll);
         return () => {
             chatArea.removeEventListener('scroll', handleScroll);
@@ -982,89 +970,6 @@ const ChatWindow = (props) => {
         });
     };
 
-    // Handle incoming call socket events
-    useEffect(() => {
-        if (!props.socket) return;
-        
-        // Listen for incoming calls
-        props.socket.on('incoming-call', (data) => {
-            console.log('Incoming call:', data);
-            if (!data.from || !data.offer || !data.caller) {
-                console.error('Invalid incoming call data', data);
-                return;
-            }
-            
-            // Don't show the call modal if user isn't in this chat
-            if (props.userdata.uid !== data.from) {
-                console.log('Ignoring call from inactive chat:', data.from);
-                props.socket.emit('call-rejected', { to: data.from });
-                return;
-            }
-            
-            // If there's already an active call, reject this one
-            if (showCallModal) {
-                console.log('Already in a call, rejecting incoming call');
-                props.socket.emit('call-rejected', { to: data.from });
-                return;
-            }
-            
-            // Set incoming call data
-            setIncomingCallData({
-                ...data,
-                caller: {
-                    ...data.caller,
-                    uid: data.from // Ensure UID is set correctly
-                }
-            });
-            
-            // Update UI to show incoming call
-            setCallType('incoming');
-            setShowCallModal(true);
-            
-            // Play ringtone or notification
-            // TODO: Add ringtone
-        });
-        
-        // Call error handler
-        props.socket.on('call-error', (data) => {
-            console.error('Call error:', data);
-            // Close call modal if it's open
-            if (showCallModal) {
-                setShowCallModal(false);
-            }
-            
-            // Show error notification
-            // TODO: Add error notification
-        });
-        
-        return () => {
-            props.socket.off('incoming-call');
-            props.socket.off('call-error');
-        };
-    }, [props.socket, props.userdata, showCallModal]);
-    
-    // Initialize call to the current active chat user
-    const startCall = () => {
-        console.log('Starting call to:', props.userdata);
-        
-        // Ensure there's an active chat
-        if (!props.userdata || !props.userdata.uid) {
-            console.error('No active chat to call');
-            return;
-        }
-        
-        // Set call type and open modal
-        setCallType('outgoing');
-        setShowCallModal(true);
-    };
-    
-    // Handle call modal close
-    const handleCallModalClose = () => {
-        console.log('Call modal closed');
-        setShowCallModal(false);
-        setIncomingCallData(null);
-    };
-
     return (
         <div className="chat-window">
             <div className='chatheader'>
@@ -1087,25 +992,15 @@ const ChatWindow = (props) => {
                     </div>
                 </div>
                 <div className='chatheaderright'>
-                    {/* Add call button */}
-                    <button 
-                        className='chatheaderbtn chat-call-button'
-                        onClick={startCall}
-                        title="Start voice call"
-                    >
-                        <PhoneCall size={24} color='#4CAF50' />
-                    </button>
                     <button className='chatheaderbtn'>
                         <Video size={24} color='white' />
                     </button>
                 </div>
             </div>
-            
             <div 
                 id='chatarea' 
                 className='chatarea'
                 ref={chatAreaRef}
-                onScroll={handleScroll}
             >
                 {props.userdata.messages.map((message, index) => (
                     <Message 
@@ -1225,18 +1120,7 @@ const ChatWindow = (props) => {
                     )}
                 </form>
             </div>
-            
-            {/* Call modal */}
-            <Call
-                isOpen={showCallModal}
-                onClose={handleCallModalClose}
-                remoteUser={callType === 'incoming' ? incomingCallData?.caller : props.userdata}
-                socket={props.socket}
-                localUser={props.localUser}
-                callType={callType}
-                initialOffer={callType === 'incoming' ? incomingCallData?.offer : null}
-            />
-            
+
             {showPreview && selectedFiles.length > 0 && (
                 <div className="file-preview-overlay">
                     <div className="file-preview-content">

@@ -39,8 +39,7 @@ h3, p {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px;
-    background-color: #212121;
+    padding: 1rem 1.5rem;
     border-bottom: 1px solid var(--border-color);
     background-color: var(--bg-secondary);
 }
@@ -94,16 +93,6 @@ h3, p {
 .chatheaderbtn:hover {
     background-color: var(--hover-bg);
     color: var(--accent-primary);
-}
-
-/* Add styles for the call button */
-.chat-call-button {
-    margin-right: 10px; /* Add space between call and video buttons */
-}
-
-/* Call button hover effect */
-.chat-call-button:hover {
-    background-color: rgba(76, 175, 80, 0.1);
 }
 
 /* Chat Area */
@@ -1326,78 +1315,4 @@ h3, p {
     .back-button {
         display: none; /* Hide back button on desktop */
     }
-}
-
-/* Chat header styles */
-.chat-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 15px;
-    background-color: #1a1a1a;
-    border-bottom: 1px solid #333;
-}
-
-.chat-header-left {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-}
-
-.chat-user-pic {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    overflow: hidden;
-    margin-right: 10px;
-}
-
-.chat-user-pic img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.chat-user-info h5 {
-    margin: 0;
-    color: #fff;
-    font-size: 16px;
-}
-
-.chat-user-info .online-status {
-    margin: 0;
-    color: #aaa;
-    font-size: 12px;
-}
-
-.chat-header-right {
-    display: flex;
-    align-items: center;
-}
-
-.chat-call-button, 
-.chat-delete-button {
-    background: none;
-    border: none;
-    color: #fff;
-    cursor: pointer;
-    padding: 8px;
-    margin-left: 5px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.chat-call-button:hover, 
-.chat-delete-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.chat-delete-button {
-    color: #ff5252;
-}
-
-.chat-call-button {
-    color: #4CAF50;
 }

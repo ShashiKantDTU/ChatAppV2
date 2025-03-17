@@ -88,52 +88,6 @@ function ChatApp() {
 
             newSocket.on('connect_error', (error) => {
                 console.error('Connection error:', error);
-                
-                // If we get a timeout or transport error, try falling back to polling only
-                if (error.message === 'timeout' || error.message.includes('websocket')) {
-                    console.log('Falling back to long-polling transport');
-                    // Close existing socket
-                    newSocket.close();
-                    
-                    // Create a new socket with polling only
-                    setTimeout(() => {
-                        const pollingSocket = io(API_URL, {
-                            reconnection: true,
-                            reconnectionAttempts: 10,
-                            reconnectionDelay: 1000,
-                            reconnectionDelayMax: 5000,
-                            timeout: 30000, // Increased timeout
-                            autoConnect: true,
-                            transports: ['polling'], // Only use polling
-                            forceNew: true,
-                            secure: API_URL.startsWith('https')
-                        });
-                        
-                        // Transfer all listeners from old socket to new one
-                        newSocket.listeners('connect').forEach(listener => 
-                            pollingSocket.on('connect', listener)
-                        );
-                        
-                        newSocket.listeners('disconnect').forEach(listener => 
-                            pollingSocket.on('disconnect', listener)
-                        );
-                        
-                        newSocket.listeners('reconnect').forEach(listener => 
-                            pollingSocket.on('reconnect', listener)
-                        );
-                        
-                        newSocket.listeners('chat-deleted').forEach(listener => 
-                            pollingSocket.on('chat-deleted', listener)
-                        );
-                        
-                        newSocket.listeners('chat-deleted-by-other').forEach(listener => 
-                            pollingSocket.on('chat-deleted-by-other', listener)
-                        );
-                        
-                        setSocket(pollingSocket);
-                        console.log('Initialized fallback socket with polling transport');
-                    }, 1000);
-                }
             });
 
             newSocket.on('reconnect', (attemptNumber) => {
