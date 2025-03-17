@@ -522,11 +522,18 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            // Update message status
+            // Update delivery status
             oldmessage.delivered = modifiedmessage.delivered;
+            
+            // Also update read status if message was marked as read
+            if (modifiedmessage.read && modifiedmessage.read.isread) {
+                console.log(`Marking message ${oldmessage._id} as read`);
+                oldmessage.read = modifiedmessage.read;
+            }
+            
             await oldmessage.save();
 
-            // Notify the sender about delivery confirmation
+            // Notify the sender about delivery and read confirmation
             const sender_socket = sender.socketid;
             if (sender_socket) {
                 io.to(sender_socket).emit('private message recieve confirmation from server', oldmessage);
@@ -910,6 +917,46 @@ io.on('connection', (socket) => {
                 chatToUpdate.unread = false;
                 await user.save();
                 console.log(`Chat ${chatId} marked as read for user ${userId}`);
+                
+                // Also update all unread messages in this chat that were sent to this user
+                const updatedMessages = await message.updateMany(
+                    { 
+                        chatid: chatId,
+                        recieverid: userId,
+                        'read.isread': { $ne: true } // Only update messages that aren't already marked as read
+                    },
+                    { 
+                        $set: { 
+                            'read.isread': true,
+                            'read.readat': new Date()
+                        } 
+                    }
+                );
+                
+                console.log(`Updated read status for ${updatedMessages.modifiedCount} messages in chat ${chatId}`);
+                
+                // Find the other user (sender) to notify them about the read messages
+                const otherUser = await User.findOne({
+                    'chats.chatid': chatId,
+                    uid: { $ne: userId }
+                });
+                
+                // Get all messages that were just marked as read to update them for the sender
+                const readMessages = await message.find({
+                    chatid: chatId,
+                    recieverid: userId,
+                    'read.isread': true
+                });
+                
+                // If the other user is online, notify them that their messages were read
+                if (otherUser && otherUser.socketid && readMessages.length > 0) {
+                    console.log(`Notifying user ${otherUser.uid} that ${readMessages.length} messages were read`);
+                    
+                    // Send each updated message to the sender
+                    readMessages.forEach(msg => {
+                        io.to(otherUser.socketid).emit('private message update from server', msg);
+                    });
+                }
             }
         } catch (error) {
             console.error('Error marking chat as read:', error);

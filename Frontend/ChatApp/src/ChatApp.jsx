@@ -302,11 +302,20 @@ function ChatApp() {
             });
           }
           
-          // Send delivery confirmation
+          // Send delivery confirmation and read confirmation if user is viewing the chat
           const modifiedMessage = {
             ...message,
             delivered: { isdelivered: true, deliveredat: new Date() }
           };
+          
+          // If the user is viewing this chat, also mark the message as read
+          if (isCurrentChat) {
+            modifiedMessage.read = { 
+              isread: true, 
+              readat: new Date() 
+            };
+            console.log('Automatically marking new message as read:', modifiedMessage._id);
+          }
           
           socket.emit("private message recieve confirmation", modifiedMessage);
           
