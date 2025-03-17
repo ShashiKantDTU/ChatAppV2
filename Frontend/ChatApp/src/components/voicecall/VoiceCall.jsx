@@ -335,10 +335,12 @@ const VoiceCall = ({
                 await peerConnectionRef.current.setLocalDescription(answer);
                 console.log('Local description set');
 
+                console.log('Sending answer to caller with ID:', storedOffer.from);
                 socket.emit('call-answered', {
                     answer,
                     to: storedOffer.from
                 });
+                console.log('Answer sent to caller');
 
                 setCallStatus('connecting');
                 console.log('Call status updated to connecting after creating answer');
@@ -532,7 +534,7 @@ const VoiceCall = ({
         
         // Handle incoming call event
         const handleIncomingCallEvent = ({ from, offer }) => {
-            console.log('Incoming call received from:', from);
+            console.log('Incoming call received:', { from, offer });
             if (!offer) {
                 console.error('No offer received in incoming-call');
                 return;
@@ -540,11 +542,12 @@ const VoiceCall = ({
             
             // Store the complete offer object with from field
             const processedOffer = {
-                ...offer,
-                from
+                type: offer.type,
+                sdp: offer.sdp,
+                from: from // Ensure the from field is at the top level
             };
             
-            console.log('Setting incoming offer:', processedOffer);
+            console.log('Setting incoming offer with from:', processedOffer);
             setStoredOffer(processedOffer);
             setCallStatus('incoming');
         };
