@@ -31,7 +31,19 @@ const io = new Server(server, {
         origin: process.env.CLIENT_URL || 'http://localhost:5173',
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
         credentials: true
-    }
+    },
+    // Add additional Socket.io server configuration options
+    pingTimeout: 30000,
+    pingInterval: 10000,
+    transports: ['websocket', 'polling'],
+    allowUpgrades: true,
+    upgradeTimeout: 10000,
+    maxHttpBufferSize: 5e6, // 5MB
+    connectTimeout: 45000,
+    perMessageDeflate: {
+        threshold: 1024, // Only compress messages larger than 1KB
+    },
+    allowEIO3: true, // Allow Engine.IO 3 compatibility mode
 });
 
 // Add cookie parser middleware BEFORE routes
