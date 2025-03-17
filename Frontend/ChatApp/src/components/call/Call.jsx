@@ -43,9 +43,21 @@ const Call = ({
     // Log component mounting and props
     useEffect(() => {
         console.log('Call component mounted', { 
-            isOpen, callType, remoteUser, localUser,
+            isOpen, callType, remoteUser, 
+            localUser: localUser ? {
+                uid: localUser.uid,
+                username: localUser.username,
+                photoURL: localUser.photoURL,
+                hasData: !!localUser
+            } : 'undefined',
             hasSocket: !!socket, hasInitialOffer: !!initialOffer 
         });
+        
+        if (!localUser) {
+            console.error('LocalUser is undefined in Call component');
+        } else if (!localUser.uid) {
+            console.error('LocalUser.uid is undefined in Call component', localUser);
+        }
     }, []);
     
     // Validate props

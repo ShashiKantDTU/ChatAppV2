@@ -1232,7 +1232,7 @@ const ChatWindow = (props) => {
                 onClose={handleCallModalClose}
                 remoteUser={callType === 'incoming' ? incomingCallData?.caller : props.userdata}
                 socket={props.socket}
-                localUser={props.user}
+                localUser={props.localUser}
                 callType={callType}
                 initialOffer={callType === 'incoming' ? incomingCallData?.offer : null}
             />
