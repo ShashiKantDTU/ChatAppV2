@@ -133,25 +133,6 @@ const Call = ({
                 }
             }, CONNECTION_TIMEOUT);
             
-            // For outgoing calls, create and send offer
-            if (isOutgoing) {
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                
-                console.log('Created offer:', offer);
-                
-                socket.emit('call-user', {
-                    userToCall: remoteUser.uid,
-                    from: localUser.uid,
-                    offer: {
-                        type: 'offer',
-                        sdp: offer.sdp
-                    }
-                });
-                
-                setCallStatus('calling');
-            }
-            
             return peerConnection;
         } catch (error) {
             console.error('Error initializing call:', error);
@@ -273,9 +254,27 @@ const Call = ({
         
         // Handle incoming call
         socket.on('incoming-call', (data) => {
-            console.log('Received incoming call:', data);
+            console.log('Incoming call:', data);
+
+            // Prevent client from handling its own call
+            if (data.from === localUser.uid) {
+                console.log('Ignoring call from self');
+                return;
+            }
+            
+            // Check if already in a call - only reject if we're actively in a call
+            if (callStatus === 'calling' || callStatus === 'connecting' || callStatus === 'ongoing') {
+                console.log('Already in a call, rejecting incoming call');
+                if (socket && data.from) {
+                    socket.emit('call-rejected', { to: data.from });
+                }
+                return;
+            }
+            
             if (data.offer) {
+                console.log('Setting up incoming call with offer');
                 setStoredOffer(data.offer);
+                setCallStatus('incoming');
             }
         });
         
@@ -302,7 +301,7 @@ const Call = ({
             socket.off('call-ended');
             socket.off('call-rejected');
         };
-    }, [isOpen, socket, localUser?.uid]);
+    }, [isOpen, socket, localUser?.uid, callStatus]);
     
     // Start an outgoing call
     const startCall = async () => {
@@ -336,8 +335,6 @@ const Call = ({
             } else {
                 throw new Error('Socket or remote user not available');
             }
-            
-            setCallStatus('calling');
         } catch (error) {
             console.error('Error starting call:', error);
             setError(`Call failed: ${error.message || 'Connection error'}`);
@@ -409,6 +406,54 @@ const Call = ({
             } catch (error) {
                 console.error('Error adding ICE candidate:', error);
             }
+        }
+    };
+    
+    // Handle an incoming call
+    const handleIncomingCall = async (forceRelay = false) => {
+        try {
+            console.log('Handling incoming call', storedOffer);
+            setCallStatus('connecting');
+            
+            if (!storedOffer) {
+                throw new Error('No offer available for incoming call');
+            }
+            
+            const peerConnection = await initializeCall(false, forceRelay);
+            
+            if (!peerConnection) {
+                throw new Error('Failed to create peer connection');
+            }
+            
+            // Set remote description from offer
+            console.log('Setting remote description from offer');
+            await peerConnection.setRemoteDescription(
+                new RTCSessionDescription(storedOffer)
+            );
+            
+            // Process any queued candidates
+            await processQueuedCandidates();
+            
+            // Create and send answer
+            console.log('Creating answer');
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            console.log('Sending answer to caller:', storedOffer.from);
+            socket.emit('call-answered', {
+                answer: {
+                    type: answer.type,
+                    sdp: answer.sdp
+                },
+                to: storedOffer.from
+            });
+            
+            console.log('Answer sent, waiting for connection');
+            setCallStatus('connecting');
+        } catch (error) {
+            console.error('Error handling incoming call:', error);
+            setError(`Failed to answer call: ${error.message || 'Connection error'}`);
+            setCallStatus('ended');
         }
     };
     

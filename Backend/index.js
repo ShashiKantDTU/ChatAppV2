@@ -207,7 +207,7 @@ app.post('/upload', (req, res, next) => {
             return {
                 url: file.path, // Cloudinary returns the full URL in the path property
                 filename: file.originalname || `file_${index + 1}`,
-                size: file.size,
+            size: file.size,
                 mimeType: file.mimetype,
                 public_id: publicId
             };
