@@ -4,8 +4,9 @@ import { FiPhoneCall as PhoneCallIcon, FiPhoneOff as PhoneOffIcon, FiMic as MicI
 import { getTurnServerConfig, getRelayOnlyConfig, testTurnServerConnectivity } from '../../services/turn';
 
 // Connection timeout constants
-const INITIAL_CONNECTION_TIMEOUT = 12000; // 12 seconds initial timeout
-const EXTENDED_CONNECTION_TIMEOUT = 20000; // 20 seconds for retry with forced relay
+const INITIAL_CONNECTION_TIMEOUT = 10000; // 10 seconds initial timeout (reduced from 12)
+const EXTENDED_CONNECTION_TIMEOUT = 15000; // 15 seconds for retry with forced relay (reduced from 20)
+const MAX_ICE_RETRIES = 2; // Maximum number of ICE retries before giving up
 
 const VoiceCall = ({ 
     isOpen, 
@@ -163,12 +164,58 @@ const VoiceCall = ({
             // Create peer connection
             const peerConnection = new RTCPeerConnection(config);
             peerConnectionRef.current = peerConnection;
+
+            // Add connection failure detection
+            let hasGeneratedRelayCandidates = false;
+            let checkRelayTimeout = setTimeout(() => {
+                if (!hasGeneratedRelayCandidates && peerConnectionRef.current) {
+                    console.warn("No relay candidates generated after 5 seconds - possible TURN server failure");
+                    // We don't abort immediately, let the normal timeout handle it
+                }
+            }, 5000);
             
             // Add audio tracks
             stream.getAudioTracks().forEach(track => {
                 console.log('Adding audio track to peer connection');
                 peerConnection.addTrack(track, stream);
             });
+            
+            // Setup connection state monitoring 
+            peerConnection.onicecandidate = (event) => {
+                if (!event.candidate) {
+                    console.log('ICE candidate gathering complete');
+                    return;
+                }
+                
+                // Extract candidate type for debug info
+                const candidateStr = event.candidate.candidate;
+                let candidateType = 'unknown';
+                if (candidateStr.includes(' host ')) candidateType = 'host';
+                else if (candidateStr.includes(' srflx ')) candidateType = 'srflx';
+                else if (candidateStr.includes(' relay ')) {
+                    candidateType = 'relay';
+                    hasGeneratedRelayCandidates = true;
+                    clearTimeout(checkRelayTimeout);
+                }
+                
+                // Update debug info
+                updateDebugInfo(candidateType);
+                
+                // Log candidate type for debugging
+                console.log(`Generated ICE candidate (${candidateType}):`);
+                
+                if (socket && remoteUser?.uid) {
+                    try {
+                        socket.emit('ice-candidate', {
+                            candidate: event.candidate,
+                            to: remoteUser.uid,
+                            from: localUser.uid
+                        });
+                    } catch (error) {
+                        console.error('Error sending ICE candidate:', error);
+                    }
+                }
+            };
             
             // Set up event handlers
             setupPeerConnectionEventHandlers(peerConnection);
@@ -182,6 +229,15 @@ const VoiceCall = ({
                 if (peerConnectionRef.current?.iceConnectionState !== 'connected' &&
                     peerConnectionRef.current?.iceConnectionState !== 'completed') {
                     console.log(`Connection attempt timed out after ${timeoutDuration/1000}s`);
+                    
+                    // Check if we generated relay candidates or not
+                    if (!hasGeneratedRelayCandidates && forceRelay) {
+                        console.error("Failed to generate relay candidates - TURN servers may be unreachable");
+                        setError("Connection failed. TURN servers unreachable. Check your network or try again.");
+                        setCallStatus('ended');
+                        return;
+                    }
+                    
                     handleConnectionTimeout(forceRelay);
                 }
             }, timeoutDuration);
@@ -339,19 +395,19 @@ const VoiceCall = ({
                             // Handle async initialization
                             initializeCall(true, true).catch(err => {
                                 console.error('Error retrying call with relay after failure:', err);
-                                setError('Failed to retry call. Please try again.');
+                                setError('Failed to retry call. Please check your network and try again.');
                                 setCallStatus('ended');
                             });
                         } else {
                             // Handle async initialization
                             handleIncomingCall(true).catch(err => {
                                 console.error('Error retrying incoming call with relay after failure:', err);
-                                setError('Failed to retry incoming call. Please try again.');
+                                setError('Failed to retry incoming call. Please check your network and try again.');
                                 setCallStatus('ended');
                             });
                         }
                     } else {
-                        setError('Connection failed. Please try again.');
+                        setError('Connection failed after multiple attempts. Your network may be blocking TURN servers.');
                         setCallStatus('ended');
                     }
                     break;
@@ -432,8 +488,14 @@ const VoiceCall = ({
             const testResult = await testTurnServerConnectivity();
             console.log('TURN connectivity test result:', testResult);
             
-            // Start with forced relay if TURN test fails
-            const shouldForceRelay = !testResult.success || !testResult.relayWorks;
+            if (!testResult.success) {
+                console.warn("TURN connectivity test failed");
+                setError("Unable to connect to TURN servers. Your call may not work in all networks.");
+                // Continue anyway, we'll fallback to direct connection if possible
+            }
+            
+            // Start with forced relay if TURN test fails to generate relay candidates
+            const shouldForceRelay = !testResult.relayWorks;
             
             // Initialize and start the call
             await initializeCall(true, shouldForceRelay);
