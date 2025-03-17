@@ -73,8 +73,8 @@ function ChatApp() {
 
     // Establish socket connection
     useEffect(() => {
-        // Only create socket if it doesn't exist
-        if (!socket) {
+        // Only create socket if it doesn't exist AND user data is available
+        if (!socket && user?.email && user?.uid) {
             console.log('Creating new socket connection');
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
             const newSocket = io(API_URL, {
@@ -167,7 +167,7 @@ function ChatApp() {
                 setSocket(null);
             }
         };
-    }, [user?.email]); // Only depend on user email
+    }, [user?.email, user?.uid]); // Depend on both email and uid to ensure user is fully loaded
     
     // Function to fetch user data from server
     const fetchUser = useCallback((uid) => {
@@ -500,12 +500,12 @@ function ChatApp() {
             console.log('Incoming call from:', callData);
             setIsIncomingCall(true);
             setCallInfo({
-                callerId: callData.callerId,
-                callerName: callData.callerName,
-                callerProfilePic: callData.callerProfilePic,
-                callType: callData.callType
+                callerId: callData?.callerId || '',
+                callerName: callData?.callerName || 'Unknown',
+                callerProfilePic: callData?.callerProfilePic || '',
+                callType: callData?.callType || 'video'
             });
-            setCallType(callData.callType || 'video');
+            setCallType(callData?.callType || 'video');
             setShowCallUI(true);
         },
         
@@ -1047,10 +1047,10 @@ function ChatApp() {
                 isOpen={showCallUI}
                 onClose={handleEndCall}
                 isIncoming={isIncomingCall}
-                caller={isIncomingCall ? { 
-                  uid: callInfo?.callerId,
-                  name: callInfo?.callerName,
-                  profilepicture: callInfo?.callerProfilePic
+                caller={isIncomingCall && callInfo ? { 
+                  uid: callInfo?.callerId || '',
+                  name: callInfo?.callerName || 'Unknown',
+                  profilepicture: callInfo?.callerProfilePic || ''
                 } : null}
                 callee={!isIncomingCall && talkingToUser ? talkingToUser : null}
                 onAccept={handleAcceptCall}
