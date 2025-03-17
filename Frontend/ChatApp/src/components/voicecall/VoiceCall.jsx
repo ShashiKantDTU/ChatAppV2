@@ -130,10 +130,25 @@ const VoiceCall = ({
                 username: 'openrelayproject',
                 credential: 'openrelayproject'
             },
-            // Backup TURN servers from Twilio or other providers could be added here
+            // Additional TURN servers for better reliability
+            {
+                urls: 'turn:relay.metered.ca:80',
+                username: 'e7d69aebe4394a1c8202c5f2',
+                credential: 'SvmHhN23gU3kfWdF'
+            },
+            {
+                urls: 'turn:relay.metered.ca:443',
+                username: 'e7d69aebe4394a1c8202c5f2',
+                credential: 'SvmHhN23gU3kfWdF'
+            },
+            {
+                urls: 'turn:relay.metered.ca:443?transport=tcp',
+                username: 'e7d69aebe4394a1c8202c5f2',
+                credential: 'SvmHhN23gU3kfWdF'
+            },
         ],
         iceCandidatePoolSize: 10,
-        iceTransportPolicy: 'all', // Try 'relay' if still having issues
+        iceTransportPolicy: 'relay', // Force the use of TURN servers by using 'relay' instead of 'all'
         bundlePolicy: 'max-bundle',
         rtcpMuxPolicy: 'require',
         sdpSemantics: 'unified-plan'
@@ -280,7 +295,16 @@ const VoiceCall = ({
             
             // Log ICE gathering state changes
             peerConnection.onicegatheringstatechange = () => {
-                console.log('ICE gathering state changed:', peerConnection.iceGatheringState);
+                const state = peerConnection.iceGatheringState;
+                console.log('ICE gathering state changed:', state);
+                
+                if (state === 'gathering') {
+                    console.log('Started gathering ICE candidates');
+                } else if (state === 'complete') {
+                    console.log('Finished gathering ICE candidates');
+                    // Log how many candidates were gathered (helps diagnose if TURN candidates are included)
+                    console.log('Total ICE candidates gathered - check if TURN candidates are present');
+                }
             };
             
             // Handle ICE candidates
@@ -304,6 +328,25 @@ const VoiceCall = ({
                     console.error('Cannot send ICE candidate: remote user ID not available');
                 } else if (!socket) {
                     console.error('Cannot send ICE candidate: socket not available');
+                }
+            };
+
+            // Log ICE connection state changes
+            peerConnection.oniceconnectionstatechange = () => {
+                const state = peerConnection.iceConnectionState;
+                console.log('ICE connection state changed:', state);
+                
+                // Detailed logging based on state
+                if (state === 'checking') {
+                    console.log('Checking ICE candidates - connection process started');
+                } else if (state === 'connected' || state === 'completed') {
+                    console.log('ICE connection established successfully');
+                } else if (state === 'failed') {
+                    console.log('ICE connection failed - could not find a path between peers');
+                    console.log('Current ICE servers:', configuration.iceServers);
+                    console.log('Current transport policy:', configuration.iceTransportPolicy);
+                } else if (state === 'disconnected') {
+                    console.log('ICE connection disconnected - attempting to restore');
                 }
             };
 
