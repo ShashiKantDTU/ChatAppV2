@@ -1221,12 +1221,11 @@ function ChatApp() {
               >
                 <Settings size={24} />
               </button>
-              <button className={styles.mobileNavButton}>
-                <img 
-                  src={user?.profilepicture || "/default-avatar.png"} 
-                  alt="Profile" 
-                  className={styles.mobileProfilePic} 
-                />
+              <button 
+                className={`${styles.mobileNavButton} ${styles.logoutMobileButton}`}
+                onClick={() => setShowLogoutConfirm(true)}
+              >
+                <LogOut size={24} />
               </button>
             </div>
           )}

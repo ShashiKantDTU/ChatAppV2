@@ -867,6 +867,28 @@ body.has-active-call.has-expanded-call .container {
   background-color: var(--bg-hover);
 }
 
+/* Logout button in mobile navigation */
+.logoutMobileButton {
+  color: var(--error);
+  position: relative;
+}
+
+.logoutMobileButton svg {
+  transition: all 0.2s ease;
+}
+
+.logoutMobileButton:hover svg, .logoutMobileButton:focus svg {
+  transform: scale(1.1);
+}
+
+.darkTheme .logoutMobileButton {
+  color: var(--error);
+}
+
+.lightTheme .logoutMobileButton {
+  color: var(--error);
+}
+
 .mobileProfilePic {
   width: 32px;
   height: 32px;
