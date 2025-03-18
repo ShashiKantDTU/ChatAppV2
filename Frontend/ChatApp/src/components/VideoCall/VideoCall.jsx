@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, X, RefreshCw, Maximize, Minimize, ChevronUp, ChevronDown } from 'lucide-react';
 import './VideoCall.css';
 
@@ -50,7 +51,8 @@ const VideoCall = ({
   socket, 
   localUser,
   callType = 'video', // 'video' or 'audio'
-  onUiModeChange = null // New callback prop
+  onUiModeChange = null, // New callback prop
+  isDarkMode = true // Theme prop with dark mode as default
 }) => {
   // Call states
   const [isCallActive, setIsCallActive] = useState(false);
@@ -2268,8 +2270,47 @@ const VideoCall = ({
     }
   };
 
-  return (
-    <div className={`video-call-container ${isOpen ? 'active' : ''} ${uiMode}`}>
+  // Add a useEffect to handle body class toggling for call UI modes
+  useEffect(() => {
+    if (isOpen) {
+      // Add a class to the body element to indicate call state
+      document.body.classList.add('has-active-call');
+      
+      // Add additional classes based on call UI mode
+      if (uiMode === 'compact') {
+        document.body.classList.add('has-compact-call');
+        document.body.classList.remove('has-collapsed-call', 'has-expanded-call');
+      } else if (uiMode === 'collapsed') {
+        document.body.classList.add('has-collapsed-call');
+        document.body.classList.remove('has-compact-call', 'has-expanded-call');
+      } else if (uiMode === 'expanded') {
+        document.body.classList.add('has-expanded-call');
+        document.body.classList.remove('has-compact-call', 'has-collapsed-call');
+      }
+    } else {
+      // Remove all call-related classes when call is not active
+      document.body.classList.remove(
+        'has-active-call',
+        'has-compact-call',
+        'has-collapsed-call',
+        'has-expanded-call'
+      );
+    }
+    
+    // Cleanup function to remove classes when component unmounts
+    return () => {
+      document.body.classList.remove(
+        'has-active-call',
+        'has-compact-call',
+        'has-collapsed-call',
+        'has-expanded-call'
+      );
+    };
+  }, [isOpen, uiMode]);
+
+  // Render the VideoCall component using a portal
+  const callContent = (
+    <div className={`video-call-container ${isOpen ? 'active' : ''} ${uiMode} ${isDarkMode ? 'dark-theme' : 'light-theme'}`} style={{ transform: 'translateY(0)' }}>
       <div className="video-call-content">
         <div className="video-call-header">
           <h3>
@@ -2279,9 +2320,30 @@ const VideoCall = ({
                 ? `Incoming ${isAudioOnly ? 'Voice' : 'Video'} Call`
                 : `${isAudioOnly ? 'Calling' : 'Video Calling'}...`}
           </h3>
-          <span className="call-duration">
-            {isCallActive && formatDuration(callDuration)}
-          </span>
+          
+          {/* Enhanced Call Duration Display */}
+          {isCallActive && (
+            <div className="call-duration-container">
+              <div className="call-indicator"></div>
+              <span className="call-duration">
+                {formatDuration(callDuration)}
+              </span>
+              <div className="duration-waves">
+                <div className="duration-wave"></div>
+                <div className="duration-wave"></div>
+                <div className="duration-wave"></div>
+                <div className="duration-wave"></div>
+                <div className="duration-wave"></div>
+              </div>
+            </div>
+          )}
+          
+          {/* Show user info in collapsed mode */}
+          {uiMode === 'collapsed' && isCallActive && (
+            <div className="collapsed-user-info">
+              {isIncoming ? caller.name : callee.name}
+            </div>
+          )}
           
           {/* UI Mode Controls */}
           <div className="call-mode-controls">
@@ -2305,9 +2367,15 @@ const VideoCall = ({
               </button>
             )}
             
-            <button className="close-button" onClick={handleEndCall} title="End Call">
-              <X size={18} />
-            </button>
+            {!isCallActive && (
+              <button
+                className="close-button"
+                onClick={onClose}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            )}
           </div>
         </div>
         
@@ -2516,16 +2584,16 @@ const VideoCall = ({
           ) : (
             <>
               {/* Regular call controls */}
-              {(uiMode !== 'collapsed' || !isAudioOnly) && (
-                <button
-                  className={`call-control-button ${isMuted ? 'disabled' : ''}`}
-                  onClick={toggleMute}
-                >
-                  {isMuted ? <MicOff size={uiMode === 'collapsed' ? 18 : 24} /> : <Mic size={uiMode === 'collapsed' ? 18 : 24} />}
-                  <span>{isMuted ? 'Unmute' : 'Mute'}</span>
-                </button>
-              )}
+              {/* Always show mute button, regardless of mode */}
+              <button
+                className={`call-control-button ${isMuted ? 'disabled' : ''}`}
+                onClick={toggleMute}
+              >
+                {isMuted ? <MicOff size={uiMode === 'collapsed' ? 18 : 24} /> : <Mic size={uiMode === 'collapsed' ? 18 : 24} />}
+                <span>{isMuted ? 'Unmute' : 'Mute'}</span>
+              </button>
               
+              {/* Always show end call button */}
               <button
                 className="call-control-button end-call"
                 onClick={handleEndCall}
@@ -2534,7 +2602,8 @@ const VideoCall = ({
                 <span>End</span>
               </button>
               
-              {!isAudioOnly && (uiMode !== 'collapsed') && (
+              {/* Only show video toggle in non-collapsed mode and for video calls */}
+              {!isAudioOnly && uiMode !== 'collapsed' && (
                 <button
                   className={`call-control-button ${!isVideoEnabled ? 'disabled' : ''}`}
                   onClick={toggleVideo}
@@ -2549,6 +2618,9 @@ const VideoCall = ({
       </div>
     </div>
   );
+
+  // Use createPortal to attach the component to body
+  return isOpen ? createPortal(callContent, document.body) : null;
 };
 
 export default VideoCall; 

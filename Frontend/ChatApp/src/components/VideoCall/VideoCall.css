@@ -1,13 +1,60 @@
 /* Main container - full screen overlay in expanded mode, floating window in compact mode */
 .video-call-container {
   position: fixed;
-  z-index: 1000;
+  z-index: 9999;
+  top: 0;
+  left: 0;
   opacity: 0;
   visibility: hidden;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
   border-radius: 12px;
   overflow: hidden;
+  transform: translateY(-20px);
+  will-change: transform, opacity, visibility;
+}
+
+/* Theme Variables */
+.video-call-container.dark-theme {
+  --call-bg-primary: #1a1a1a;
+  --call-bg-secondary: #2a2a2a;
+  --call-bg-tertiary: #333333;
+  --call-text-primary: #ffffff;
+  --call-text-secondary: #b0b8c8;
+  --call-accent-primary: #7983ff;
+  --call-accent-secondary: #8f92f0;
+  --call-border-color: rgba(255, 255, 255, 0.1);
+  --call-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  --call-error: #ff6b6b;
+  --call-success: #2ecc71;
+  --call-warning: #f5b041;
+  --call-button-bg: #444;
+  --call-button-hover: #555;
+  --call-button-disabled: #ff5555;
+  --call-end-button: #e74c3c;
+  --call-header-bg: #2a2a2a;
+  --call-info-bg: #222;
+}
+
+.video-call-container.light-theme {
+  --call-bg-primary: #f5f7fa;
+  --call-bg-secondary: #e9eef5;
+  --call-bg-tertiary: #dde5ee;
+  --call-text-primary: #2c3e50;
+  --call-text-secondary: #4a6172;
+  --call-accent-primary: #5048e5;
+  --call-accent-secondary: #6366f1;
+  --call-border-color: rgba(0, 0, 0, 0.1);
+  --call-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  --call-error: #ef4444;
+  --call-success: #10b981;
+  --call-warning: #f59e0b;
+  --call-button-bg: #e4e7ef;
+  --call-button-hover: #d1d5e1;
+  --call-button-disabled: #ef4444;
+  --call-end-button: #ef4444;
+  --call-header-bg: #e9eef5;
+  --call-info-bg: #f0f5fa;
 }
 
 /* Full screen mode (default/expanded) */
@@ -16,54 +63,69 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.85);
+  background-color: var(--call-bg-primary);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 1;
   visibility: visible;
+  transform: translateY(0);
 }
 
-/* PiP mode (compact) for desktop */
+.dark-theme.video-call-container.active.expanded {
+  background-color: rgba(0, 0, 0, 0.85);
+}
+
+.light-theme.video-call-container.active.expanded {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+/* PiP mode (compact) for desktop - Positioned at top */
 .video-call-container.active.compact {
-  bottom: 80px;
-  right: 20px;
-  width: 300px;
-  max-height: 350px;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-height: 150px;
   opacity: 1;
   visibility: visible;
-  resize: both;
-  max-width: 400px; 
-  min-width: 220px;
-  min-height: 200px;
+  transform: translateY(0);
+  border-radius: 0 0 12px 12px;
+  background-color: var(--call-bg-primary);
+  box-shadow: var(--call-shadow);
 }
 
-/* For mobile devices in compact mode */
-@media (max-width: 768px) {
+/* For desktop in compact mode - Allow more flexibility */
+@media (min-width: 769px) {
   .video-call-container.active.compact {
-    bottom: 0;
+    top: 0;
+    left: auto;
     right: 0;
-    left: 0;
-    width: 100%;
-    height: auto;
-    max-height: 150px;
-    border-radius: 12px 12px 0 0;
-    resize: none;
-    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.2);
+    width: 300px;
+    max-height: 350px;
+    resize: both;
+    max-width: 400px; 
+    min-width: 220px;
+    min-height: 200px;
+    margin: 10px;
+    border-radius: 12px;
   }
 }
 
-/* Collapsed state for mobile */
+/* Collapsed state - Positioned at top */
 .video-call-container.active.collapsed {
-  bottom: 0;
+  top: 0;
   right: 0;
   left: 0;
   width: 100%;
   height: 60px;
   opacity: 1;
   visibility: visible;
-  border-radius: 12px 12px 0 0;
-  box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.2);
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  background-color: rgba(42, 42, 42, 0.95);
+  border-bottom: 2px solid #7983ff;
+  transform: translateY(0);
 }
 
 .video-call-content {
@@ -71,7 +133,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #1a1a1a;
+  background-color: var(--call-bg-primary);
   position: relative;
 }
 
@@ -81,18 +143,28 @@
   border-radius: 12px;
 }
 
+/* Special layout for collapsed mode to ensure content fits properly */
+.collapsed .video-call-content {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .video-call-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background-color: #2a2a2a;
-  color: white;
+  background-color: var(--call-header-bg);
+  color: var(--call-text-primary);
 }
 
 /* Simplified header for collapsed mode */
 .collapsed .video-call-header {
   padding: 8px 12px;
+  background-color: transparent;
+  flex: 1;
+  max-width: 60%;
 }
 
 .video-call-header h3 {
@@ -107,17 +179,157 @@
 .collapsed .video-call-header h3 {
   font-size: 14px;
   max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* User info in collapsed mode */
+.collapsed-user-info {
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  margin-left: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+  display: none; /* Hide by default, show on larger screens */
+}
+
+/* Show user info on larger screens in collapsed mode */
+@media (min-width: 480px) {
+  .collapsed-user-info {
+    display: block;
+  }
+
+  .collapsed .video-call-header h3 {
+    max-width: 180px;
+  }
+}
+
+/* Call duration styling enhancements */
+.call-duration-container {
+  display: flex;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  padding: 4px 8px;
+  margin-left: 12px;
+}
+
+/* Enhance collapsed call duration appearance */
+.collapsed .call-duration-container {
+  padding: 2px 6px;
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .call-duration {
   font-size: 14px;
-  color: #ddd;
-  margin-left: 12px;
-  margin-right: 12px;
+  color: #fff;
+  font-weight: 500;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Active call indicator */
+.call-indicator {
+  width: 8px;
+  height: 8px;
+  background-color: #7983ff;
+  border-radius: 50%;
+  margin-right: 8px;
+  animation: pulse-call 1.5s ease-in-out infinite;
+  position: relative;
+}
+
+/* Audio waves for call duration */
+.duration-waves {
+  display: flex;
+  align-items: center;
+  height: 14px;
+  margin-left: 8px;
+}
+
+.duration-wave {
+  width: 3px;
+  height: 5px;
+  background-color: rgba(121, 131, 255, 0.7);
+  border-radius: 1px;
+  margin: 0 1px;
+  animation: duration-wave-anim 1.3s ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.duration-wave:nth-child(2) {
+  animation-delay: 0.2s;
+  height: 7px;
+}
+
+.duration-wave:nth-child(3) {
+  animation-delay: 0.4s;
+  height: 10px;
+}
+
+.duration-wave:nth-child(4) {
+  animation-delay: 0.6s;
+  height: 7px;
+}
+
+.duration-wave:nth-child(5) {
+  animation-delay: 0.8s;
+  height: 5px;
+}
+
+.collapsed .call-duration-container {
+  padding: 2px 6px;
 }
 
 .collapsed .call-duration {
   font-size: 12px;
+}
+
+.collapsed .call-indicator {
+  width: 6px;
+  height: 6px;
+}
+
+.collapsed .duration-waves {
+  height: 10px;
+}
+
+.collapsed .duration-wave {
+  width: 2px;
+  margin: 0 1px;
+}
+
+@keyframes duration-wave-anim {
+  0%, 100% {
+    transform: scaleY(0.5);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes pulse-call {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--call-accent-primary), 0.4);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.3);
+    box-shadow: 0 0 0 5px rgba(var(--call-accent-primary), 0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--call-accent-primary), 0);
+  }
 }
 
 /* Add controls to resize/expand the call UI */
@@ -261,7 +473,7 @@
   justify-content: center;
   align-items: center;
   padding: 12px;
-  background-color: #2a2a2a;
+  background-color: var(--call-bg-secondary);
   gap: 16px;
 }
 
@@ -271,8 +483,12 @@
 }
 
 .collapsed .call-controls {
-  padding: 0 8px;
+  padding: 0 12px;
+  background-color: transparent;
   justify-content: flex-end;
+  gap: 10px;
+  height: 100%;
+  align-items: center;
 }
 
 .call-control-button {
@@ -280,12 +496,12 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background-color: #444;
+  background-color: var(--call-button-bg);
   border: none;
   border-radius: 50%;
   width: 48px;
   height: 48px;
-  color: white;
+  color: var(--call-text-primary);
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
@@ -297,9 +513,25 @@
 }
 
 .collapsed .call-control-button {
-  width: 32px;
-  height: 32px;
-  margin-left: 8px;
+  width: 36px;
+  height: 36px;
+  margin-left: 0;
+  background-color: #333;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.collapsed .call-control-button.end-call {
+  background-color: rgba(231, 76, 60, 0.9);
+  border: 1px solid rgba(231, 76, 60, 0.5);
+}
+
+.collapsed .call-control-button.disabled {
+  background-color: rgba(255, 85, 85, 0.8);
+}
+
+.collapsed .call-control-button:hover {
+  transform: scale(1.1);
 }
 
 .call-control-button span {
@@ -316,24 +548,24 @@
 }
 
 .call-control-button:hover {
-  background-color: #555;
+  background-color: var(--call-button-hover);
   transform: scale(1.05);
 }
 
 .call-control-button.disabled {
-  background-color: #ff5555;
+  background-color: var(--call-button-disabled);
 }
 
 .call-control-button.end-call {
-  background-color: #e74c3c;
+  background-color: var(--call-end-button);
 }
 
 .call-control-button.accept {
-  background-color: #2ecc71;
+  background-color: var(--call-success);
 }
 
 .call-control-button.reject {
-  background-color: #e74c3c;
+  background-color: var(--call-end-button);
 }
 
 /* Loading and error states */
@@ -362,7 +594,7 @@
 }
 
 .error-message {
-  color: #ff6b6b;
+  color: var(--call-error);
   text-align: center;
   padding: 16px;
   max-width: 100%;
@@ -579,4 +811,109 @@
   50% {
     height: 100%;
   }
+}
+
+/* Global body styles for call states */
+body.has-active-call {
+  overflow: hidden; /* Prevent scrolling on the main content when call is active */
+}
+
+body.has-expanded-call {
+  overflow: hidden;
+}
+
+/* Ensure content under the call UI is still accessible in compact and collapsed modes */
+body.has-compact-call .video-call-container,
+body.has-collapsed-call .video-call-container {
+  pointer-events: auto; /* Enable interactions with the call UI */
+}
+
+/* Main container styles */
+@keyframes callEntry {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes callExit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+/* Light theme specific adjustments for collapsed mode */
+.light-theme.video-call-container.active.collapsed {
+  background-color: rgba(233, 238, 245, 0.95);
+  border-bottom: 2px solid var(--call-accent-primary);
+}
+
+.light-theme .collapsed .call-controls {
+  background-color: transparent;
+}
+
+.light-theme .collapsed .call-control-button {
+  background-color: var(--call-button-bg);
+  border: 1px solid var(--call-border-color);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.light-theme .collapsed .call-control-button.end-call {
+  background-color: var(--call-end-button);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Adjustments for audio-only container in light theme */
+.light-theme .audio-only-container {
+  background-color: var(--call-bg-secondary);
+}
+
+.light-theme .audio-only-container h2 {
+  color: var(--call-text-primary);
+}
+
+.light-theme .audio-only-avatar {
+  border: 3px solid var(--call-border-color);
+}
+
+.light-theme .audio-only-container .audio-wave {
+  background-color: var(--call-accent-primary);
+}
+
+.light-theme .local-speaking {
+  color: var(--call-success);
+}
+
+.light-theme .call-indicator {
+  background-color: var(--call-accent-primary);
+}
+
+.light-theme .duration-wave {
+  background-color: var(--call-accent-primary);
+}
+
+.light-theme .debug-audio-button {
+  background: var(--call-button-bg) !important;
+  color: var(--call-text-primary) !important;
+  border: 1px solid var(--call-border-color) !important;
+}
+
+/* Ensure consistent coloring of the close and mode buttons in light theme */
+.light-theme .call-mode-button,
+.light-theme .close-button {
+  color: var(--call-text-primary);
+}
+
+.light-theme .call-mode-button:hover,
+.light-theme .close-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
 } 

@@ -32,10 +32,14 @@ h3, p {
     height: 100%;
     background-color: var(--bg-primary);
     position: relative;
+    transition: all 0.3s ease;
 }
 
 /* Enhanced Header Design */
 .chatheader {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -105,6 +109,7 @@ h3, p {
     gap: 1rem;
     border: 2px dashed transparent;
     transition: border-color 0.2s ease;
+    height: auto;
 }
 
 .chatarea::-webkit-scrollbar {
@@ -1315,27 +1320,4 @@ h3, p {
     .back-button {
         display: none; /* Hide back button on desktop */
     }
-}
-
-/* Styles for chat window when a call is active */
-.chat-window.has-active-call {
-  /* Ensure content is still accessible with call UI */
-  padding-bottom: 60px; /* For collapsed call UI */
-}
-
-@media (max-width: 768px) {
-  .chat-window.has-active-call {
-    padding-bottom: 150px; /* For compact call UI on mobile */
-  }
-}
-
-/* Ensure the message container scrolls properly with call UI */
-.chat-window.has-active-call .messagelist {
-  max-height: calc(100% - 120px);
-}
-
-@media (max-width: 768px) {
-  .chat-window.has-active-call .messagelist {
-    max-height: calc(100% - 210px);
-  }
 }

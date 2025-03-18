@@ -129,7 +129,31 @@
   backdrop-filter: blur(var(--glass-blur));
   position: relative;
   width: 100%;
-  height: 100vh;
+  transition: height 0.3s ease, margin-top 0.3s ease;
+}
+
+/* Updated styles for when call is active to create proper spacing */
+body.has-active-call .container {
+  /* Keep the full height but add padding at the top to create space for call UI */
+  padding-top: 0; /* Will be overridden by specific call modes */
+  transition: padding-top 0.3s ease, opacity 0.3s ease;
+}
+
+/* Compact call mode - provide space at the top for the compact call UI */
+body.has-active-call.has-compact-call .container {
+  padding-top: 150px; /* Height of compact call UI */
+}
+
+/* Collapsed call mode - smaller space for collapsed call UI */
+body.has-active-call.has-collapsed-call .container {
+  padding-top: 60px; /* Height of collapsed call bar */
+}
+
+/* Expanded call mode - make content slightly translucent */
+body.has-active-call.has-expanded-call .container {
+  /* Keep content visible but make it slightly translucent */
+  opacity: 0.3;
+  pointer-events: none; /* Prevent interaction with background content */
   overflow: hidden;
 }
 
@@ -233,6 +257,8 @@
   position: relative;
   overflow: hidden;
   z-index: 5;
+  height: 100%;
+  transition: height 0.3s ease, padding-top 0.3s ease;
 }
 
 /* Search Section Styles */
@@ -819,7 +845,7 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  z-index: 1000;
+  z-index: 9000; /* High value but still below the video call UI (9999) */
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
   border-top: 1px solid var(--border-color);
 }
@@ -1025,35 +1051,42 @@
   }
 }
 
-/* Ensure that the chat app container properly handles the call UI overlay */
-.container {
-  position: relative;
-  width: 100%;
-  height: 100vh;
-  overflow: hidden;
-}
-
 /* Adjust z-index to ensure call UI is above other elements but below modals */
 .mainContent {
   z-index: 5;
+  height: 100%;
+  transition: height 0.3s ease, padding-top 0.3s ease;
 }
 
 /* For video calls, ensure content is still accessible */
-.hasActiveCall .chatSection,
-.hasActiveCall .recentChatsSection,
-.hasActiveCall .searchSection,
-.hasActiveCall .settingsSection {
-  /* Add a slight padding at the bottom to account for collapsed call UI */
-  padding-bottom: 60px;
+body.has-active-call .chatSection,
+body.has-active-call .recentChatsSection,
+body.has-active-call .searchSection,
+body.has-active-call .settingsSection {
+  /* These sections will inherit the padding from the container */
+  transition: padding-top 0.3s ease;
 }
 
 /* Mobile-specific adjustments for call UI */
 @media (max-width: 640px) {
-  .hasActiveCall .mainContent {
-    padding-bottom: 150px; /* Larger padding for expanded compact mode */
+  body.has-active-call.has-compact-call .container {
+    padding-top: 150px; /* Larger padding for compact mode on mobile */
   }
-
-  .hasActiveCall.hasCollapsedCall .mainContent {
-    padding-bottom: 60px; /* Smaller padding for collapsed call UI */
+  
+  body.has-active-call.has-collapsed-call .container {
+    padding-top: 60px; /* Smaller padding for collapsed call UI */
+  }
+  
+  /* Ensure the mobile navigation bar is positioned properly with call UI */
+  body.has-active-call .mobileNavBar {
+    transition: transform 0.3s ease;
+  }
+  
+  body.has-active-call.has-compact-call .mobileNavBar {
+    transform: translateY(150px); /* Push down by height of compact call UI */
+  }
+  
+  body.has-active-call.has-collapsed-call .mobileNavBar {
+    transform: translateY(60px); /* Push down by height of collapsed call UI */
   }
 }

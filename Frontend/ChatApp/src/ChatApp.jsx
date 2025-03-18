@@ -983,8 +983,29 @@ function ChatApp() {
         setCallUiMode(mode);
     };
 
+    // Add this useEffect after the existing effects
+    useEffect(() => {
+      // Listen for classes added to body by the VideoCall component
+      const handleBodyClassChange = () => {
+        // We can add custom behavior here if needed when body classes change
+        // For example, adjusting other UI elements based on call state
+      };
+
+      // Create a MutationObserver to detect class changes on the body
+      const observer = new MutationObserver(handleBodyClassChange);
+      observer.observe(document.body, { 
+        attributes: true, 
+        attributeFilter: ['class'] 
+      });
+
+      return () => {
+        // Clean up the observer when component unmounts
+        observer.disconnect();
+      };
+    }, []);
+
     return (
-      <div className={`${styles.container} ${isDarkMode ? styles.darkTheme : styles.lightTheme} ${showGlobalCallUI ? styles.hasActiveCall : ''} ${showGlobalCallUI && callUiMode === 'collapsed' ? styles.hasCollapsedCall : ''}`}>
+      <div className={`${styles.container} ${isDarkMode ? styles.darkTheme : styles.lightTheme}`}>
         {/* Desktop Navigation Panel - Hidden on Mobile */}
         <nav className={`${styles.navigationPanel} ${ismobile ? styles.hiddenOnMobile : ''}`}>
           <div className={styles.logoSection}>
@@ -1229,6 +1250,7 @@ function ChatApp() {
                 localUser={user}
                 callType={callType}
                 onUiModeChange={handleCallUiModeChange}
+                isDarkMode={isDarkMode}
             />
         )}
         

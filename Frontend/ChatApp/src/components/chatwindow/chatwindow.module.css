@@ -1,11 +1,1 @@
-/* Styles for chat window when a call is active */
-.has-active-call {
-  /* Ensure content is still accessible with call UI */
-  padding-bottom: 60px; /* For collapsed call UI */
-}
-
-@media (max-width: 768px) {
-  .has-active-call {
-    padding-bottom: 150px; /* For compact call UI on mobile */
-  }
-} 
+/* No need for specific call styles in this file anymore as we're adjusting the container height in ChatApp.module.css */ 
