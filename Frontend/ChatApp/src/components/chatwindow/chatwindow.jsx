@@ -1072,7 +1072,7 @@ const ChatWindow = (props) => {
     };
 
     return (
-        <div className="chat-window">
+        <div className={`chat-window ${showCallUI ? 'has-active-call' : ''}`}>
             <div className='chatheader'>
                 <div className='chatheaderleft'>
                     {props.onBack && (

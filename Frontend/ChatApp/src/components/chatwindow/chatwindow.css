@@ -1316,3 +1316,26 @@ h3, p {
         display: none; /* Hide back button on desktop */
     }
 }
+
+/* Styles for chat window when a call is active */
+.chat-window.has-active-call {
+  /* Ensure content is still accessible with call UI */
+  padding-bottom: 60px; /* For collapsed call UI */
+}
+
+@media (max-width: 768px) {
+  .chat-window.has-active-call {
+    padding-bottom: 150px; /* For compact call UI on mobile */
+  }
+}
+
+/* Ensure the message container scrolls properly with call UI */
+.chat-window.has-active-call .messagelist {
+  max-height: calc(100% - 120px);
+}
+
+@media (max-width: 768px) {
+  .chat-window.has-active-call .messagelist {
+    max-height: calc(100% - 210px);
+  }
+}

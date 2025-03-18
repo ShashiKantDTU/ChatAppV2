@@ -1,55 +1,69 @@
+/* Main container - full screen overlay in expanded mode, floating window in compact mode */
 .video-call-container {
   position: fixed;
   z-index: 1000;
-  transition: all 0.3s ease;
-  overflow: hidden;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   opacity: 0;
   visibility: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Full screen mode (default/expanded) */
+.video-call-container.active.expanded {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Expanded mode (default) */
-.video-call-container.active:not(.minimized) {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80%;
-  max-width: 800px;
-  height: 80%;
-  max-height: 600px;
   opacity: 1;
   visibility: visible;
-  background-color: rgba(0, 0, 0, 0.9);
 }
 
-/* Minimized mode */
-.video-call-container.active.minimized {
-  top: auto;
-  bottom: 16px;
-  right: 16px;
-  width: 260px;
-  height: 180px;
+/* PiP mode (compact) for desktop */
+.video-call-container.active.compact {
+  bottom: 80px;
+  right: 20px;
+  width: 300px;
+  max-height: 350px;
   opacity: 1;
   visibility: visible;
-  background-color: #1a1a1a;
+  resize: both;
+  max-width: 400px; 
+  min-width: 220px;
+  min-height: 200px;
 }
 
-/* Ringing mode - somewhat bigger than minimized but smaller than full */
-.video-call-container.active.ringing {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 320px;
-  max-width: 90%;
-  height: auto;
-  max-height: 80%;
+/* For mobile devices in compact mode */
+@media (max-width: 768px) {
+  .video-call-container.active.compact {
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+    max-height: 150px;
+    border-radius: 12px 12px 0 0;
+    resize: none;
+    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Collapsed state for mobile */
+.video-call-container.active.collapsed {
+  bottom: 0;
+  right: 0;
+  left: 0;
+  width: 100%;
+  height: 60px;
   opacity: 1;
   visibility: visible;
-  background-color: rgba(0, 0, 0, 0.9);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.2);
 }
 
 .video-call-content {
@@ -58,36 +72,39 @@
   display: flex;
   flex-direction: column;
   background-color: #1a1a1a;
-  border-radius: 12px;
-  overflow: hidden;
   position: relative;
+}
+
+/* Adjust layout for compact and collapsed modes */
+.compact .video-call-content,
+.collapsed .video-call-content {
+  border-radius: 12px;
 }
 
 .video-call-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 12px 16px;
   background-color: #2a2a2a;
   color: white;
 }
 
-/* Smaller header in minimized mode */
-.minimized .video-call-header {
+/* Simplified header for collapsed mode */
+.collapsed .video-call-header {
   padding: 8px 12px;
 }
 
 .video-call-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Smaller text in minimized mode */
-.minimized .video-call-header h3 {
+.collapsed .video-call-header h3 {
   font-size: 14px;
   max-width: 120px;
 }
@@ -95,41 +112,55 @@
 .call-duration {
   font-size: 14px;
   color: #ddd;
-  margin-left: auto;
-  margin-right: 20px;
+  margin-left: 12px;
+  margin-right: 12px;
 }
 
-.minimized .call-duration {
+.collapsed .call-duration {
   font-size: 12px;
-  margin-right: 10px;
 }
 
-/* Close and minimize buttons */
-.call-header-controls {
+/* Add controls to resize/expand the call UI */
+.call-mode-controls {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  margin-left: auto;
 }
 
-.close-button, .minimize-button {
+.call-mode-button {
   background: transparent;
   border: none;
   color: #fff;
   cursor: pointer;
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 5px;
+  transition: background-color 0.2s;
+}
+
+.call-mode-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.close-button {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background-color 0.2s;
 }
 
-.minimized .close-button, .minimized .minimize-button {
-  width: 24px;
-  height: 24px;
-}
-
-.close-button:hover, .minimize-button:hover {
+.close-button:hover {
   background-color: rgba(255, 255, 255, 0.1);
 }
 
@@ -138,6 +169,11 @@
   position: relative;
   background-color: #000;
   overflow: hidden;
+  min-height: 0;
+}
+
+.collapsed .video-streams {
+  display: none;
 }
 
 .remote-video-container {
@@ -149,9 +185,12 @@
   background-color: #111;
 }
 
-/* Position of local video based on state */
 .local-video-container {
   position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 80px;
+  height: 60px;
   border-radius: 8px;
   overflow: hidden;
   border: 2px solid rgba(255, 255, 255, 0.2);
@@ -159,26 +198,19 @@
   transition: all 0.3s ease;
 }
 
-.minimized .local-video-container {
+.compact .local-video-container {
+  width: 60px;
+  height: 45px;
   bottom: 8px;
   right: 8px;
-  width: 70px;
-  height: 50px;
-}
-
-:not(.minimized) .local-video-container {
-  bottom: 16px;
-  right: 16px;
-  width: 160px;
-  height: 120px;
 }
 
 .camera-switch-button {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 32px;
-  height: 32px;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background-color: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -192,11 +224,9 @@
   padding: 0;
 }
 
-.minimized .camera-switch-button {
-  width: 24px;
-  height: 24px;
-  top: 4px;
-  right: 4px;
+.compact .camera-switch-button {
+  width: 20px;
+  height: 20px;
 }
 
 .camera-switch-button:hover {
@@ -225,30 +255,24 @@
   object-fit: cover;
 }
 
-/* Controls are hidden in minimized mode */
+/* Call controls */
 .call-controls {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 20px;
+  padding: 12px;
   background-color: #2a2a2a;
-  gap: 24px;
-  transition: all 0.3s ease;
+  gap: 16px;
 }
 
-.minimized .call-controls {
+.compact .call-controls {
   padding: 8px;
   gap: 12px;
-  opacity: 0;
-  height: 0;
-  overflow: hidden;
 }
 
-/* Hover over minimized call to show controls */
-.minimized:hover .call-controls {
-  opacity: 1;
-  height: auto;
-  overflow: visible;
+.collapsed .call-controls {
+  padding: 0 8px;
+  justify-content: flex-end;
 }
 
 .call-control-button {
@@ -259,28 +283,35 @@
   background-color: #444;
   border: none;
   border-radius: 50%;
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   color: white;
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
 }
 
-.minimized .call-control-button {
+.compact .call-control-button {
   width: 36px;
   height: 36px;
 }
 
+.collapsed .call-control-button {
+  width: 32px;
+  height: 32px;
+  margin-left: 8px;
+}
+
 .call-control-button span {
   position: absolute;
-  bottom: -20px;
-  font-size: 12px;
+  bottom: -18px;
+  font-size: 11px;
   white-space: nowrap;
   opacity: 0.8;
 }
 
-.minimized .call-control-button span {
+.compact .call-control-button span,
+.collapsed .call-control-button span {
   display: none;
 }
 
@@ -305,6 +336,7 @@
   background-color: #e74c3c;
 }
 
+/* Loading and error states */
 .loading-indicator {
   display: flex;
   flex-direction: column;
@@ -323,21 +355,37 @@
   margin-bottom: 16px;
 }
 
+.compact .spinner {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 8px;
+}
+
 .error-message {
   color: #ff6b6b;
   text-align: center;
-  padding: 20px;
+  padding: 16px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
-.minimized .error-message {
-  padding: 10px;
+.compact .error-message {
+  padding: 8px;
   font-size: 12px;
 }
 
 .call-info {
-  padding: 8px 16px;
+  padding: 8px 12px;
   background-color: #222;
   text-align: center;
+}
+
+.compact .call-info {
+  padding: 4px 8px;
+}
+
+.collapsed .call-info {
+  display: none;
 }
 
 .user-info {
@@ -348,29 +396,41 @@
 }
 
 .user-info img {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   margin-right: 8px;
   object-fit: cover;
 }
 
-.minimized .user-info img {
+.compact .user-info img {
   width: 24px;
   height: 24px;
+  margin-right: 6px;
 }
 
 .user-info h4 {
   margin: 0;
   font-weight: normal;
+  font-size: 14px;
 }
 
-/* Audio-only mode styles - maintain the minimized look feel */
+.compact .user-info h4 {
+  font-size: 12px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Audio-only call styling */
 .video-streams.audio-only {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #1c1c1c;
+  background-color: #222;
 }
 
 .audio-only-container {
@@ -380,30 +440,25 @@
   justify-content: center;
   padding: 20px;
   text-align: center;
-  height: 100%;
-  width: 100%;
+  color: white;
+  flex: 1;
 }
 
-.minimized .audio-only-container {
+.compact .audio-only-container {
   padding: 10px;
 }
 
 .audio-only-avatar {
-  width: 120px;
-  height: 120px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
-  background-color: #333;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 3px solid #4a4a4a;
-  box-shadow: 0 0 0 5px rgba(74, 74, 74, 0.3);
-  margin-bottom: 16px;
-  animation: pulse 2s infinite;
   overflow: hidden;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  animation: pulse 2s infinite;
+  margin-bottom: 16px;
 }
 
-.minimized .audio-only-avatar {
+.compact .audio-only-avatar {
   width: 60px;
   height: 60px;
   margin-bottom: 8px;
@@ -416,30 +471,26 @@
 }
 
 .audio-only-container h2 {
-  color: white;
-  font-size: 1.5rem;
-  margin: 0 0 12px 0;
-  font-weight: 400;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 500;
+  color: #fff;
 }
 
-.minimized .audio-only-container h2 {
-  font-size: 0.9rem;
-  margin-bottom: 6px;
+.compact .audio-only-container h2 {
+  font-size: 16px;
+  margin-bottom: 8px;
 }
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(74, 74, 74, 0.6);
+    box-shadow: 0 0 0 0 rgba(120, 120, 255, 0.4);
   }
   70% {
-    box-shadow: 0 0 0 12px rgba(74, 74, 74, 0);
+    box-shadow: 0 0 0 10px rgba(120, 120, 255, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(74, 74, 74, 0);
+    box-shadow: 0 0 0 0 rgba(120, 120, 255, 0);
   }
 }
 
@@ -453,58 +504,60 @@
   justify-content: center;
   height: 50px;
   gap: 4px;
-  margin-top: 16px;
-  margin-bottom: 16px;
+  margin: 12px 0;
 }
 
-.minimized .audio-only-container .audio-waves {
+.compact .audio-only-container .audio-waves {
   height: 30px;
-  margin-top: 8px;
-  margin-bottom: 8px;
+  margin: 8px 0;
 }
 
 .audio-only-container .audio-wave {
-  width: 4px;
-  background-color: #4CAF50;
-  border-radius: 2px;
-  animation: audio-wave 1.5s infinite ease-in-out;
-  animation-delay: calc(var(--i) * 0.2s);
-  transition: height 0.2s ease;
+  width: 6px;
+  background-color: #7983ff;
+  border-radius: 6px;
+  animation: audio-wave 1.3s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.active-call .audio-only-container .audio-wave {
+  animation-play-state: running;
 }
 
 .speaking-indicator {
-  color: #aaa;
-  margin-top: 8px;
-  font-size: 0.9em;
+  margin-top: 12px;
+  text-align: center;
 }
 
 .local-speaking {
-  color: #4CAF50;
+  color: #7aff7a;
+  font-size: 14px;
+  animation: pulse-text 1.5s ease-in-out infinite;
   font-weight: 500;
-  animation: pulse-text 2s infinite;
-  margin-bottom: 8px;
 }
 
-.minimized .local-speaking {
-  font-size: 0.8em;
-  margin-bottom: 4px;
+.compact .local-speaking {
+  font-size: 12px;
 }
 
 .debug-audio-button {
-  padding: 8px 12px !important;
-  border-radius: 4px !important; 
+  margin-top: 8px !important;
+  padding: 6px 10px !important;
+  border-radius: 4px !important;
   background: #555 !important;
   color: white !important;
   border: 1px solid #888 !important;
   cursor: pointer !important;
-  margin-top: 10px !important;
   font-size: 12px !important;
+  font-weight: bold !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+  display: block !important;
+  margin: 8px auto !important;
 }
 
-.minimized .debug-audio-button {
-  padding: 4px 8px !important;
+.compact .debug-audio-button {
   font-size: 10px !important;
-  margin-top: 5px !important;
+  padding: 4px 8px !important;
 }
 
 @keyframes pulse-text {
@@ -521,65 +574,9 @@
 
 @keyframes audio-wave {
   0%, 100% {
-    transform: scaleY(0.5);
+    height: 10px;
   }
   50% {
-    transform: scaleY(1);
-  }
-}
-
-/* Mobile styles */
-@media (max-width: 768px) {
-  .video-call-container.active:not(.minimized) {
-    width: 100%;
     height: 100%;
-    max-width: 100%;
-    max-height: 100%;
-    top: 0;
-    left: 0;
-    transform: none;
-    border-radius: 0;
-  }
-
-  .video-call-container.active.minimized {
-    bottom: 60px; /* Gives space for mobile nav bar */
-    right: 10px;
-    width: 180px;
-    height: 130px;
-  }
-  
-  .video-call-container.active.ringing {
-    width: 90%;
-    height: auto;
-  }
-
-  .video-call-content {
-    border-radius: 0;
-  }
-  
-  .minimized .video-call-content {
-    border-radius: 12px;
-  }
-
-  .local-video-container {
-    width: 100px;
-    height: 80px;
-    bottom: 10px;
-    right: 10px;
-  }
-
-  .call-controls {
-    padding: 15px 10px;
-    gap: 12px;
-  }
-
-  .call-control-button {
-    width: 48px;
-    height: 48px;
-  }
-  
-  .minimized .call-control-button {
-    width: 32px;
-    height: 32px;
   }
 } 

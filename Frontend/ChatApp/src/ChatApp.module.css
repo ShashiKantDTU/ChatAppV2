@@ -127,6 +127,10 @@
   color: var(--text-primary);
   transition: all 0.3s ease;
   backdrop-filter: blur(var(--glass-blur));
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* Navigation Panel Styles */
@@ -228,6 +232,7 @@
   display: flex;
   position: relative;
   overflow: hidden;
+  z-index: 5;
 }
 
 /* Search Section Styles */
@@ -1017,5 +1022,38 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Ensure that the chat app container properly handles the call UI overlay */
+.container {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Adjust z-index to ensure call UI is above other elements but below modals */
+.mainContent {
+  z-index: 5;
+}
+
+/* For video calls, ensure content is still accessible */
+.hasActiveCall .chatSection,
+.hasActiveCall .recentChatsSection,
+.hasActiveCall .searchSection,
+.hasActiveCall .settingsSection {
+  /* Add a slight padding at the bottom to account for collapsed call UI */
+  padding-bottom: 60px;
+}
+
+/* Mobile-specific adjustments for call UI */
+@media (max-width: 640px) {
+  .hasActiveCall .mainContent {
+    padding-bottom: 150px; /* Larger padding for expanded compact mode */
+  }
+
+  .hasActiveCall.hasCollapsedCall .mainContent {
+    padding-bottom: 60px; /* Smaller padding for collapsed call UI */
   }
 }

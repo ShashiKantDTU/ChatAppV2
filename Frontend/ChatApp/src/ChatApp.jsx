@@ -38,7 +38,8 @@ function ChatApp() {
     const [callType, setCallType] = useState('video');
     const navigate = useNavigate();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-    const [callMinimized, setCallMinimized] = useState(false);
+    // Add state to track call UI mode
+    const [callUiMode, setCallUiMode] = useState('expanded'); // 'expanded', 'compact', or 'collapsed'
 
     // Function to handle window resize
     const handleResize = useCallback(() => {
@@ -939,10 +940,6 @@ function ChatApp() {
             callerId: callInfo.callerId,
             calleeId: user.uid
         });
-
-        // Auto-minimize the call window after accepting
-        // This state will be passed to the VideoCall component
-        setCallMinimized(true);
     };
     
     // Handle rejecting a call globally
@@ -962,8 +959,6 @@ function ChatApp() {
     const handleGlobalEndCall = () => {
         setShowGlobalCallUI(false);
         setCallInfo(null);
-        // Reset call minimized state when call ends
-        setCallMinimized(false);
     };
 
     // Function to get caller user data
@@ -983,13 +978,13 @@ function ChatApp() {
         }
     }, [fetchUser]);
 
-    // Handle call minimization toggling
-    const handleCallMinimizeToggle = (isMinimized) => {
-        setCallMinimized(isMinimized);
+    // Handle call UI mode change
+    const handleCallUiModeChange = (mode) => {
+        setCallUiMode(mode);
     };
 
     return (
-      <div className={`${styles.container} ${isDarkMode ? styles.darkTheme : styles.lightTheme}`}>
+      <div className={`${styles.container} ${isDarkMode ? styles.darkTheme : styles.lightTheme} ${showGlobalCallUI ? styles.hasActiveCall : ''} ${showGlobalCallUI && callUiMode === 'collapsed' ? styles.hasCollapsedCall : ''}`}>
         {/* Desktop Navigation Panel - Hidden on Mobile */}
         <nav className={`${styles.navigationPanel} ${ismobile ? styles.hiddenOnMobile : ''}`}>
           <div className={styles.logoSection}>
@@ -1214,29 +1209,28 @@ function ChatApp() {
               </button>
             </div>
           )}
-
-          {/* Global VideoCall Component */}
-          {showGlobalCallUI && (
-              <VideoCall
-                  isOpen={showGlobalCallUI}
-                  onClose={handleGlobalEndCall}
-                  isIncoming={isIncomingCall}
-                  caller={isIncomingCall ? {
-                      uid: callInfo?.callerId,
-                      name: callInfo?.callerName,
-                      profilepicture: callInfo?.callerProfilePic || '/default-avatar.png'
-                  } : null}
-                  callee={!isIncomingCall ? talkingToUser : null}
-                  onAccept={handleGlobalAcceptCall}
-                  onReject={handleGlobalRejectCall}
-                  socket={socket}
-                  localUser={user}
-                  callType={callType}
-                  initialMinimized={callMinimized}
-                  onMinimizeChange={handleCallMinimizeToggle}
-              />
-          )}
         </main>
+        
+        {/* Global VideoCall Component - Positioned outside the main content to avoid layout issues */}
+        {showGlobalCallUI && (
+            <VideoCall
+                isOpen={showGlobalCallUI}
+                onClose={handleGlobalEndCall}
+                isIncoming={isIncomingCall}
+                caller={isIncomingCall ? {
+                    uid: callInfo?.callerId,
+                    name: callInfo?.callerName,
+                    profilepicture: callInfo?.callerProfilePic || '/default-avatar.png'
+                } : null}
+                callee={!isIncomingCall ? talkingToUser : null}
+                onAccept={handleGlobalAcceptCall}
+                onReject={handleGlobalRejectCall}
+                socket={socket}
+                localUser={user}
+                callType={callType}
+                onUiModeChange={handleCallUiModeChange}
+            />
+        )}
         
         {/* Moved logout confirmation dialog outside of nav to be centered on whole screen */}
         {showLogoutConfirm && (
