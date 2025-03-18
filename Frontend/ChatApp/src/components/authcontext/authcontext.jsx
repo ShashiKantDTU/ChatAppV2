@@ -20,15 +20,6 @@ const AuthProvider = ({ children }) => {
             return;
         }
 
-        // Add a safety timeout to prevent infinite loading
-        const safetyTimeout = setTimeout(() => {
-            if (loading) {
-                console.log("Safety timeout triggered - forcing loading to false");
-                setLoading(false);
-                navigate('/login');
-            }
-        }, 15000); // 15 seconds max loading time
-
         const fetchUser = async (retryCount = 0) => {
             try {
                 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -109,9 +100,6 @@ const AuthProvider = ({ children }) => {
         };
 
         fetchUser();
-        
-        // Clear the safety timeout if component unmounts or dependencies change
-        return () => clearTimeout(safetyTimeout);
     }, [location.pathname, navigate, loading]); // Added navigate and loading to dependencies
 
     // 🔹 Show loading screen while checking auth

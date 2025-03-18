@@ -17,6 +17,8 @@
     z-index: 2;
     max-width: 600px;
     text-align: center;
+    position: relative;
+    z-index: 5;
   }
   
   .loading-title {
@@ -117,6 +119,8 @@
     width: 100%;
     max-width: 450px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 5;
   }
   
   .reload-message p {
@@ -135,6 +139,8 @@
     cursor: pointer;
     transition: all 0.3s ease;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    position: relative;
+    z-index: 10;
   }
   
   .reload-button:hover {
@@ -153,6 +159,7 @@
     top: 0;
     left: 0;
     z-index: 1;
+    pointer-events: none;
   }
   
   .particle {

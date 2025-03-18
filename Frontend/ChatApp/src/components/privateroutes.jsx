@@ -8,15 +8,6 @@ const PrivateRoute = ({ children }) => {
     const authContext = useContext(AuthContext);
 
     useEffect(() => {
-        // Add a safety timeout to prevent infinite loading
-        const safetyTimeout = setTimeout(() => {
-            if (isAuthenticated === 'loading' || isAuthenticated === null) {
-                console.log("PrivateRoute safety timeout triggered - forcing authentication state");
-                setIsAuthenticated(false);
-                localStorage.removeItem('auth_token');
-            }
-        }, 15000); // 15 seconds max loading time
-
         // Check if we have a token in localStorage even if authContext is null
         if (!authContext || !authContext.user) {
             const token = localStorage.getItem('auth_token');
@@ -68,9 +59,6 @@ const PrivateRoute = ({ children }) => {
             // We have a user in the context
             setIsAuthenticated(true);
         }
-
-        // Clear the safety timeout if component unmounts or dependencies change
-        return () => clearTimeout(safetyTimeout);
     }, [authContext]);
 
     // Show loading while checking token
