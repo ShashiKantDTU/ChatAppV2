@@ -31,8 +31,8 @@ const Authloading = () => {
   }, []);
 
   const handleReload = () => {
-    // Force a full page reload instead of just navigating
-    window.location.reload();
+    // Redirect to home page and then reload
+    window.location.href = '/';
   };
 
   return (
