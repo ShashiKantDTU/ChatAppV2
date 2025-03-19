@@ -165,7 +165,7 @@ body.has-active-call.has-expanded-call .container {
   padding: 1rem;
   background: linear-gradient(135deg, var(--nav-gradient-1), var(--nav-gradient-2));
   border-right: 1px solid var(--glass-border);
-  width: 80px;
+  width: 90px;
   transition: all 0.3s ease;
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -229,8 +229,14 @@ body.has-active-call.has-expanded-call .container {
 }
 
 .buttonLabel {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 500;
+  display: inline-block;
+  white-space: nowrap;
+  overflow: visible;
+  transition: color 0.2s ease;
+  text-align: center;
+  min-width: 40px; /* Ensure minimum width for label */
 }
 
 .userProfile {
@@ -478,18 +484,42 @@ body.has-active-call.has-expanded-call .container {
 
 /* Logout Button specific styles */
 .logoutButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 75px; /* Add minimum width to contain Logout text */
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 12px;
   color: #ef4444;
-}
-
-.logoutButton::before {
-  background: linear-gradient(45deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  overflow: visible;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--glass-shadow);
 }
 
 .logoutButton:hover {
-  background-color: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.12);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.15);
 }
 
-.logoutButton .settingsIcon {
+.logoutButton:active {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.1);
+}
+
+.logoutButton svg {
+  margin-right: 0;
+  margin-bottom: 0.4rem;
+  min-width: 24px;
   color: #ef4444;
 }
 
@@ -956,33 +986,53 @@ body.has-active-call.has-expanded-call .container {
 
 .logoutButton {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   width: 100%;
+  min-width: 75px; /* Add minimum width to contain Logout text */
   padding: 0.75rem;
-  background: linear-gradient(135deg, 
-    rgba(var(--accent-primary-rgb), 0.1),
-    rgba(var(--accent-primary-rgb), 0.05)
-  );
-  border: 1px solid rgba(var(--border-color-rgb), 0.1);
-  border-radius: 10px;
-  color: var(--accent-primary);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 12px;
+  color: #ef4444;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+  text-align: center;
+  overflow: visible;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--glass-shadow);
 }
 
 .logoutButton:hover {
-  background: linear-gradient(135deg, 
-    rgba(var(--accent-primary-rgb), 0.15),
-    rgba(var(--accent-primary-rgb), 0.1)
-  );
-  transform: translateY(-2px);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+  background: rgba(239, 68, 68, 0.12);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 3px 8px rgba(239, 68, 68, 0.15);
+}
+
+.logoutButton:active {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.1);
 }
 
 .logoutButton svg {
-  margin-right: 0.5rem;
+  margin-right: 0;
+  margin-bottom: 0.4rem;
+  min-width: 24px;
+  color: #ef4444;
+}
+
+/* Make sure button label is visible */
+.logoutButton .buttonLabel {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: visible;
+  color: #ef4444;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  min-width: 60px; /* Increase minimum width to better contain Logout text */
 }
 
 /* Logout Confirmation Dialog */

@@ -3,36 +3,6 @@ import styles from "./recentchats.module.css"; // Import CSS as a module
 import ProfileHeader from "./profileheader";
 import EditProfileModal from "./EditProfileModal";
 
-// Skeleton UI component for loading state
-// This can be used directly in places where we need to show a skeleton loader
-const SkeletonRecentChats = () => {
-  return (
-    <div className={styles.recentChatsContainer}>
-      <div className={styles.recentChatsHeader}>
-        <div className={`${styles.skeletonText} ${styles.skeletonTitle}`}></div>
-        <div className={`${styles.skeletonButton}`}></div>
-      </div>
-      
-      <div className={styles.searchContainer}>
-        <div className={`${styles.skeletonSearch}`}></div>
-      </div>
-      
-      <div className={styles.chatList}>
-        {[...Array(5)].map((_, index) => (
-          <div className={styles.skeletonChatItem} key={index}>
-            <div className={styles.skeletonAvatar}></div>
-            <div className={styles.skeletonContent}>
-              <div className={styles.skeletonName}></div>
-              <div className={styles.skeletonMessage}></div>
-            </div>
-            <div className={styles.skeletonTime}></div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
 const RecentChats = (props) => {
   const [user, setUser] = useState({}); // User object
   const [searchQuery, setSearchQuery] = useState('');
@@ -115,7 +85,6 @@ const RecentChats = (props) => {
   }
 
   const chats = user.chats; // Array of chat objects
-  // console.log(chats)
 
   function copyCode() {
     const userId = document.getElementById('UID').textContent;
@@ -131,39 +100,26 @@ const RecentChats = (props) => {
 
   const handleEditProfile = async (formData) => {
     setIsUpdating(true);
-    console.log('Updating profile with FormData');
     
     try {
-      // Check if formData is already a FormData object
       let dataToSend;
       if (formData instanceof FormData) {
         dataToSend = formData;
-        console.log('Using provided FormData for profile update');
       } else {
-        // If it's a plain object, convert to FormData
         dataToSend = new FormData();
         for (const key in formData) {
           dataToSend.append(key, formData[key]);
         }
-        console.log('Converted object to FormData for profile update');
       }
 
-      // Determine which endpoint to use based on whether there's a file
       const hasProfileImage = dataToSend.has('profileImage') && dataToSend.get('profileImage') instanceof File;
       
-      console.log('Has profile image:', hasProfileImage);
-      
-      // Call the API endpoint to update profile
       const endpoint = hasProfileImage 
         ? 'http://localhost:3000/update-profile-image' 
         : 'http://localhost:3000/update-profile';
         
-      console.log('Using endpoint:', endpoint);
-
       const response = await fetch(endpoint, {
         method: 'PUT',
-        // Don't set Content-Type header when sending FormData
-        // The browser will automatically set it with the correct boundary
         credentials: 'include',
         body: dataToSend
       });
@@ -174,15 +130,12 @@ const RecentChats = (props) => {
       }
 
       const data = await response.json();
-      console.log('Profile updated successfully:', data);
 
-      // Update local state
       setUser(prev => ({
         ...prev,
         ...data.user
       }));
 
-      // Refresh user data after a short delay
       setTimeout(() => {
         props.refreshUser();
       }, 1000);
@@ -213,10 +166,6 @@ const RecentChats = (props) => {
     return date.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
   }
   
-  
-  // FIX THIS TOMMOROW
-  
-
   const handleContextMenu = (e, chatId) => {
     e.preventDefault();
     setContextMenu({

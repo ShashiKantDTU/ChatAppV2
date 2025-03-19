@@ -115,65 +115,16 @@ const ChatWindow = (props) => {
         });
     }, [props.userdata?.uid, props.userdata?.onlinestatus]);
 
-    // console.log('chat time converted',formatChatTime('2025-02-28T10:07:36.102Z'))
-
-    // WE ARE GETTING USER DATA FROM PARENT COMPONENT THAT IS DETAILS OF RECIEVER USER
-    // {
-    //     "name": "Yash Rawat",
-    //     "uid": "1qpP",
-    //     "onlinestatus": {
-    //         "online": true,
-    //         "lastSeen": "2025-02-28T09:55:14.851Z"
-    //     },
-    //     "profilepicture": "https://lh3.googleusercontent.com/a/ACg8ocIA3OHITcE4au_HGS-2ufPfouLJDkl97LXV0Lb9VCxOqQ7Wlg=s96-c",
-    //     "messages": []
-    // }
-
-
-    // MESSAGE ARRAY CONTAINING  OBJECT AS STRUCTURED BELOW 
-    // [
-    //     {
-    //         "chatid": "1qpPTiTf",
-    //         "senderid": "1qpP",
-    //         "recieverid": "TiTf",
-    //         "groupid": null,
-    //         "messagetext": "H",
-    //         "sent": {
-    //             "issent": true,
-    //             "sentat": "2025-02-28T10:07:36.102Z"
-    //         },
-    //         "delivered": {
-    //             "isdelivered": false,
-    //             "deliveredat": null
-    //         },
-    //         "read": {
-    //             "isread": false,
-    //             "readat": null
-    //         },
-    //         "deletedfor": [],
-    //         "deletedby": null,
-    //         "createdat": "2025-02-28T10:07:36.098Z",
-    //         "_id": "67c18ae8cb404be50a5246db",
-    //         "__v": 0
-    //     }
-    // ]
-
     useEffect(() => {
-        // Debug log for socket availability
-        console.log('Socket status:', {
-            isAvailable: !!props.socket,
-            localUser: props.localUser,
-            remoteUser: props.userdata
-        });
+        // Remove debug log for socket availability
     }, [props.socket, props.localUser, props.userdata]);
 
     // Add this new useEffect to close media preview when chat changes
     useEffect(() => {
-        // Close media preview when chat changes
         if (showMediaPreview) {
             handleCloseMediaPreview();
         }
-    }, [props.userdata.uid]); // Only trigger when the chat user changes
+    }, [props.userdata.uid]);
 
     if(!props.userdata || !props.userdata.messages){
         return <div className='Loading'>Loading Chats</div>
@@ -291,57 +242,29 @@ const ChatWindow = (props) => {
         setShowPreview(false);
 
         try {
-            // Check socket connection
             if (!props.socket?.connected) {
                 throw new Error('Socket connection lost. Please wait for reconnection.');
             }
 
-            console.log(`Starting upload of ${selectedFiles.length} files to Cloudinary`);
             const formData = new FormData();
             selectedFiles.forEach((file, index) => {
-                console.log(`Appending file ${index + 1}: ${file.name}`);
                 formData.append('file', file);
             });
 
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
             
-            // Log the FormData contents for debugging with safer type checking
-            console.log("FormData created, files appended. FormData contains:");
-            for (let pair of formData.entries()) {
-                const value = pair[1];
-                const isFile = value && typeof File !== 'undefined' && 
-                    Object.prototype.toString.call(value) === '[object File]';
-                
-                console.log(pair[0] + ': ' + (isFile ? 
-                    `File(${value.name}, ${value.type}, ${value.size} bytes)` : 
-                    value));
-            }
-            
-            // IMPORTANT: Don't manually set Content-Type when using FormData
-            // The browser will automatically set the correct multipart/form-data
-            // Content-Type with the proper boundary
             const response = await fetch(`${API_URL}/upload`, {
                 method: 'POST',
                 body: formData,
-                credentials: 'include', // Include credentials if needed for authentication
-                // Explicitly do NOT set Content-Type here - browser will set it correctly
+                credentials: 'include',
                 headers: {
-                    // Including Authorization header if needed for authentication
                     ...(localStorage.getItem('token') ? {
                         'Authorization': `Bearer ${localStorage.getItem('token')}`
                     } : {})
                 }
             });
 
-            // Log response details for debugging
-            console.log('Upload response status:', response.status);
-            console.log('Upload response headers:', {
-                contentType: response.headers.get('content-type'),
-                contentLength: response.headers.get('content-length')
-            });
-
             if (!response.ok) {
-                // Try to get detailed error from response
                 let errorMessage = 'Upload to Cloudinary failed';
                 try {
                     const errorData = await response.json();
@@ -358,25 +281,15 @@ const ChatWindow = (props) => {
                 throw new Error(data.error || 'Upload failed');
             }
 
-            console.log(`Server returned ${data.files.length} Cloudinary files`);
-            // Add detailed logging of the first file to understand its structure
-            if (data.files.length > 0) {
-                console.log('First file details:', JSON.stringify(data.files[0], null, 2));
-            }
-
-            // Process each uploaded Cloudinary file
             for (let index = 0; index < data.files.length; index++) {
                 let retryCount = 0;
                 const maxRetries = 3;
                 const file = data.files[index];
                 
-                console.log(`Processing Cloudinary file ${index + 1}:`, file);
-                
                 while (retryCount < maxRetries) {
                     try {
-                        // Determine media type from mime type
                         const mimeType = file.mimeType;
-                        let mediaType = 'file'; // Default type
+                        let mediaType = 'file';
                         
                         if (mimeType.startsWith('image/')) {
                             mediaType = 'image';
@@ -386,7 +299,6 @@ const ChatWindow = (props) => {
                             mediaType = 'audio';
                         }
 
-                        // Create media message with Cloudinary URL and public_id
                         const mediaMessage = {
                             chatid: props.userdata.chatid,
                             senderid: props.localUser.uid,
@@ -398,7 +310,7 @@ const ChatWindow = (props) => {
                                 filename: file.filename,
                                 size: file.size,
                                 mimeType: file.mimeType,
-                                cloudinary_id: file.public_id // Store Cloudinary public_id for potential deletion later
+                                cloudinary_id: file.public_id
                             },
                             sent: { issent: true, sentat: new Date() },
                             delivered: { isdelivered: false, deliveredat: null },
@@ -406,24 +318,16 @@ const ChatWindow = (props) => {
                             deletedfor: [],
                             deletedby: null,
                             createdat: new Date(),
-                            // Add a unique temporary ID to identify this message locally
                             _id: `temp_${Date.now()}_${index}`,
                             reactions: [],
-                            // Add a flag to indicate this is a server message that should be handled by the socket
                             isBeingSentToServer: true
                         };
 
-                        // IMPORTANT: DON'T add message to UI first - let the socket handler do it
-                        // Just send it to the server directly
-                        console.log(`Sending Cloudinary media message for file ${index + 1}`);
                         props.handlesend(mediaMessage);
                         
-                        // Update progress
                         const progress = ((index + 1) / data.files.length) * 100;
                         setUploadProgress(progress);
-                        console.log(`Upload progress: ${progress}%`);
                         
-                        // If successful, break the retry loop
                         break;
                     } catch (error) {
                         retryCount++;
@@ -433,13 +337,11 @@ const ChatWindow = (props) => {
                             throw new Error(`Failed to process Cloudinary file ${file.filename} after ${maxRetries} attempts`);
                         }
                         
-                        // Wait before retrying
                         await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
                     }
                 }
             }
 
-            console.log('All Cloudinary files processed and sent');
             setSelectedFiles([]);
         } catch (error) {
             console.error('Error in Cloudinary upload process:', error);
@@ -599,24 +501,15 @@ const ChatWindow = (props) => {
 
             mediaRecorderRef.current.onstop = async () => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                console.log('Audio recording completed, blob size:', audioBlob.size);
                 setAudioBlob(audioBlob);
                 
-                // Create a new object URL each time to ensure it's fresh
                 const audioURL = URL.createObjectURL(audioBlob);
-                console.log('Created audio URL:', audioURL);
                 
-                // Set the audio source and load it
                 if (audioRef.current) {
                     audioRef.current.src = audioURL;
                     audioRef.current.load();
                     
-                    // Add event listeners for better debugging
                     audioRef.current.onloadedmetadata = () => {
-                        console.log('Audio metadata loaded:', {
-                            duration: audioRef.current.duration,
-                            src: audioRef.current.src
-                        });
                     };
                     
                     audioRef.current.onerror = (e) => {
@@ -634,7 +527,7 @@ const ChatWindow = (props) => {
                 }
             };
 
-            mediaRecorderRef.current.start(100); // Collect data every 100ms for smoother playback
+            mediaRecorderRef.current.start(100);
             setIsRecording(true);
             setRecordingTime(0);
 
@@ -652,20 +545,17 @@ const ChatWindow = (props) => {
             await handleAudioUpload(audioBlob);
         }
         
-        // Clean up audio resources
         if (audioRef.current) {
             const oldSrc = audioRef.current.src;
             audioRef.current.pause();
             audioRef.current.src = '';
             audioRef.current.load();
             
-            // Revoke the object URL to prevent memory leaks
             if (oldSrc && oldSrc.startsWith('blob:')) {
                 URL.revokeObjectURL(oldSrc);
             }
         }
         
-        // Clear the playback timer
         if (playbackTimerRef.current) {
             clearInterval(playbackTimerRef.current);
         }
@@ -679,14 +569,6 @@ const ChatWindow = (props) => {
     const toggleAudioPlayback = () => {
         if (!audioRef.current || !audioBlob) return;
         
-        console.log('Toggle audio playback, current state:', {
-            isPlaying,
-            audioSrc: audioRef.current.src,
-            duration: audioRef.current.duration,
-            paused: audioRef.current.paused,
-            blobSize: audioBlob.size
-        });
-        
         if (isPlaying) {
             audioRef.current.pause();
             setIsPlaying(false);
@@ -694,21 +576,17 @@ const ChatWindow = (props) => {
                 clearInterval(playbackTimerRef.current);
             }
         } else {
-            // Ensure the audio source is set
             if (!audioRef.current.src) {
                 const audioURL = URL.createObjectURL(audioBlob);
                 audioRef.current.src = audioURL;
                 audioRef.current.load();
             }
             
-            // Play with error handling
             const playPromise = audioRef.current.play();
             if (playPromise !== undefined) {
                 playPromise
                     .then(() => {
-                        console.log('Audio playback started successfully');
                         setIsPlaying(true);
-                        // Start updating the playback time
                         playbackTimerRef.current = setInterval(handleTimeUpdate, 100);
                     })
                     .catch(error => {
@@ -743,42 +621,19 @@ const ChatWindow = (props) => {
             const formData = new FormData();
             formData.append('file', audioBlob, 'audio.webm');
             
-            // Log the FormData contents for debugging - with safer type checking
-            console.log("Audio FormData created with blob. FormData contains:");
-            for (let pair of formData.entries()) {
-                const value = pair[1];
-                const isBlob = value && typeof Blob !== 'undefined' && 
-                    (Object.prototype.toString.call(value) === '[object Blob]' || 
-                     Object.prototype.toString.call(value) === '[object File]');
-                
-                console.log(pair[0] + ': ' + (isBlob ? 
-                    `Blob/File(${value.size} bytes, ${value.type})` : 
-                    value));
-            }
-
             const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
             const response = await fetch(`${API_URL}/upload`, {
                 method: 'POST',
                 body: formData,
-                credentials: 'include', // Include credentials if needed
-                // Explicitly do NOT set Content-Type when using FormData
+                credentials: 'include',
                 headers: {
-                    // Include Authorization header if needed
                     ...(localStorage.getItem('token') ? {
                         'Authorization': `Bearer ${localStorage.getItem('token')}`
                     } : {})
                 }
             });
             
-            // Log response details for debugging
-            console.log('Audio upload response status:', response.status);
-            console.log('Audio upload response headers:', {
-                contentType: response.headers.get('content-type'),
-                contentLength: response.headers.get('content-length')
-            });
-
             if (!response.ok) {
-                // Try to get detailed error from response
                 let errorMessage = 'Cloudinary audio upload failed';
                 try {
                     const errorData = await response.json();
@@ -795,18 +650,12 @@ const ChatWindow = (props) => {
                 throw new Error(data.error || 'Audio upload to Cloudinary failed');
             }
 
-            // Server returns 'files' array, not a single 'file' object
-            // Extract the first file from the array
             const uploadedFile = data.files && data.files.length > 0 ? data.files[0] : null;
             
             if (!uploadedFile) {
                 throw new Error('No file data returned from Cloudinary');
             }
 
-            console.log('Successfully uploaded audio file to Cloudinary:', uploadedFile);
-            console.log('Audio file details:', JSON.stringify(uploadedFile, null, 2));
-
-            // Create audio message with Cloudinary URL
             const audioMessage = {
                 chatid: props.userdata.chatid,
                 senderid: props.localUser.uid,
@@ -818,7 +667,7 @@ const ChatWindow = (props) => {
                     filename: uploadedFile.filename,
                     size: uploadedFile.size,
                     mimeType: uploadedFile.mimeType,
-                    cloudinary_id: uploadedFile.public_id // Store the Cloudinary public_id
+                    cloudinary_id: uploadedFile.public_id
                 },
                 sent: { issent: true, sentat: new Date() },
                 delivered: { isdelivered: false, deliveredat: null },
@@ -826,19 +675,13 @@ const ChatWindow = (props) => {
                 deletedfor: [],
                 deletedby: null,
                 createdat: new Date(),
-                // Add a unique temporary ID to identify this message locally
                 _id: `temp_audio_${Date.now()}`,
                 reactions: [],
-                // Add a flag to indicate this is a server message
                 isBeingSentToServer: true
             };
             
-            // IMPORTANT: DON'T add message to UI first - let the socket handler do it
-            // Just send it to the server directly
-            console.log('Sending Cloudinary audio message');
             props.handlesend(audioMessage);
 
-            // Clean up audio recording state
             setAudioBlob(null);
             setIsRecording(false);
             setRecordingTime(0);

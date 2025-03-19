@@ -10,6 +10,10 @@ const nanoid = require('nanoid')
 const multer = require('multer')
 const cloudinary = require('cloudinary').v2
 const { CloudinaryStorage } = require('multer-storage-cloudinary')
+const nodemailer = require('nodemailer')
+const emailService = require('../utils/emailService')
+const rateLimit = require('express-rate-limit')
+const logger = require('../utils/logger')
 
 const {register , login, verifyJWT , logout} = require('../controllers/userController')
 
@@ -335,6 +339,152 @@ router.put('/update-profile-image', verifyJWT, (req, res, next) => {
     } catch (error) {
         console.error('Error updating profile with image:', error);
         res.status(500).json({ message: 'Failed to update profile', error: error.message });
+    }
+});
+
+// Add rate limiter and logger imports
+const passwordResetLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 3, // 3 requests per IP during windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many password reset requests. Please try again after 15 minutes.' }
+});
+
+// Forgot Password Route - Apply rate limiting and improve error handling
+router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ message: 'Email is required' });
+        }
+
+        // Find the user
+        const user = await User.findOne({ email });
+        if (!user) {
+            logger.warn(`Password reset attempted for non-existent email: ${email}`);
+            // Don't reveal if a user exists to prevent user enumeration
+            return res.status(200).json({ 
+                message: 'If your email exists in our system, you will receive a password reset link' 
+            });
+        }
+
+        // Generate a reset token
+        const resetToken = jwt.sign(
+            { userId: user._id, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        // Store reset token and expiry in user document
+        user.resetPasswordToken = resetToken;
+        user.resetPasswordExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+        await user.save();
+
+        // Create reset URL
+        const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+        const resetUrl = `${CLIENT_URL}/reset-password?token=${resetToken}`;
+
+        // Send password reset email using the email service
+        const emailResult = await emailService.sendPasswordResetEmail(
+            user.email,
+            user.username,
+            resetUrl
+        );
+
+        logger.info(`Password reset email sent to: ${email}`);
+
+        // Production-safe response (doesn't leak the resetUrl)
+        const isProd = process.env.NODE_ENV === 'production';
+        if (isProd) {
+            return res.status(200).json({
+                message: 'If your email exists in our system, you will receive a password reset link'
+            });
+        } else {
+            // Development response with helpful debugging info
+            return res.status(200).json({
+                message: 'Password reset link sent to your email',
+                resetUrl: resetUrl,
+                previewUrl: emailResult.previewUrl
+            });
+        }
+    } catch (error) {
+        logger.error('Forgot password error:', error);
+        // Generic error message for production
+        res.status(500).json({ 
+            message: 'An error occurred while processing your request. Please try again later.' 
+        });
+    }
+});
+
+// Reset Password Route - Improve error handling for production
+router.post('/reset-password', async (req, res) => {
+    try {
+        const { token, password } = req.body;
+        
+        if (!token || !password) {
+            return res.status(400).json({ message: 'Token and password are required' });
+        }
+
+        if (password.length < 8) {
+            return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+        }
+
+        // Verify token
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
+        } catch (error) {
+            logger.warn('Invalid reset token used');
+            return res.status(400).json({ message: 'Invalid or expired token' });
+        }
+
+        // Find user by email from token
+        const user = await User.findOne({ 
+            email: decoded.email,
+            resetPasswordToken: token,
+            resetPasswordExpires: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            logger.warn(`Reset token used but no matching user found for email: ${decoded.email}`);
+            return res.status(400).json({ message: 'Token is invalid or has expired' });
+        }
+
+        // Hash new password
+        const salt = 10;
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Update user's password and clear reset token fields
+        user.password = hashedPassword;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+
+        // Send confirmation email
+        try {
+            const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+            const loginUrl = `${CLIENT_URL}/login`;
+            
+            await emailService.sendPasswordResetConfirmationEmail(
+                user.email,
+                user.username,
+                loginUrl
+            );
+            
+            logger.info(`Password reset successful for user: ${user.email}`);
+        } catch (emailError) {
+            // Log the error but don't fail the request if email sending fails
+            logger.error('Error sending confirmation email:', emailError);
+        }
+
+        res.status(200).json({ message: 'Password has been reset successfully' });
+        
+    } catch (error) {
+        logger.error('Reset password error:', error);
+        res.status(500).json({ 
+            message: 'An error occurred while resetting your password. Please try again later.' 
+        });
     }
 });
 

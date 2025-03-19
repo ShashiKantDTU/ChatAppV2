@@ -6,6 +6,8 @@ import CheckAuth from './checkauth.jsx';
 import ChatApp from './ChatApp.jsx';
 import PrivateRoute from './components/privateroutes.jsx';
 import Logout from './components/logout.jsx';
+import ForgotPasswordPage from './pages/forgotpassword.jsx';
+import ResetPasswordPage from './pages/resetpassword.jsx';
 
 function App() {
   return (
@@ -17,6 +19,8 @@ function App() {
           <Route path="/signup" element={<DarkSignupForm />} />
           <Route path="/login" element={<DarkLoginForm />} />
           <Route path="/logout" element={<Logout />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
         </Routes>
       </AuthProvider>
     </Router>

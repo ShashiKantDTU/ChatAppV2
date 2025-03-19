@@ -43,6 +43,12 @@ const userSchema = new mongoose.Schema({
         type: String,
         unique: true
     },
+    resetPasswordToken: {
+        type: String
+    },
+    resetPasswordExpires: {
+        type: Date
+    },
     chats: [
         {
             typeofchat: {

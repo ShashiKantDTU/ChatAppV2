@@ -16,6 +16,16 @@ const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 const fetch = require('node-fetch');
+const logger = require('./utils/logger');
+const morgan = require('morgan');
+const path = require('path');
+const fs = require('fs');
+
+// Ensure logs directory exists
+const logsDir = path.join(__dirname, 'logs');
+if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+}
 
 // Configure Cloudinary
 cloudinary.config({
@@ -41,19 +51,29 @@ app.use(cookie());
 // Add session support for OAuth state
 app.use(configureSession());
 
-// Log all incoming request headers for debugging
-app.use((req, res, next) => {
-    console.log('=== REQUEST DEBUG ===');
-    console.log('Request URL:', req.originalUrl);
-    console.log('Request headers:', {
-        cookie: req.headers.cookie,
-        origin: req.headers.origin,
-        host: req.headers.host,
-        referer: req.headers.referer
+// Use Morgan for HTTP request logging in development, but not in production
+if (process.env.NODE_ENV !== 'production') {
+    app.use(morgan('dev'));
+} else {
+    // Use combined format and write to access log in production
+    app.use(morgan('combined', { stream: logger.stream }));
+}
+
+// Only log request details in development environment
+if (process.env.NODE_ENV !== 'production') {
+    app.use((req, res, next) => {
+        logger.debug('=== REQUEST DEBUG ===');
+        logger.debug(`Request URL: ${req.originalUrl}`);
+        logger.debug('Request headers:', {
+            cookie: req.headers.cookie,
+            origin: req.headers.origin,
+            host: req.headers.host,
+            referer: req.headers.referer
+        });
+        logger.debug(`Content-Type: ${req.headers['content-type']}`);
+        next();
     });
-    console.log('Content-Type:', req.headers['content-type']);
-    next();
-});
+}
 
 // Enable CORS for specific choices
 app.use(cors({
@@ -1245,23 +1265,86 @@ io.on('connection', (socket) => {
 // Database Connection
 const connectDB = async () => {
     try {
-        await mongoose.connect(process.env.MongoURI);
-        console.log("✅ MongoDB connected successfully.");
+        await mongoose.connect(process.env.MongoURI, {
+            // Added these options for better stability in production
+            // particularly on platforms like Render where connections might drop
+            serverSelectionTimeoutMS: 10000,
+            socketTimeoutMS: 45000,
+        });
+        logger.info("✅ MongoDB connected successfully.");
     } catch (error) {
-        console.error("❌ MongoDB connection error:", error);
-        process.exit(1); // Exit process with failure
+        logger.error("❌ MongoDB connection error:", error);
+        // In production, we might want to retry connecting rather than exiting
+        if (process.env.NODE_ENV === 'production') {
+            logger.warn("Will retry MongoDB connection in 5 seconds...");
+            setTimeout(connectDB, 5000);
+        } else {
+            process.exit(1); // Exit process with failure in development
+        }
     }
 };
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    logger.error(`Unhandled error: ${err.message}`, { error: err.stack });
+    
+    const statusCode = err.statusCode || 500;
+    const message = process.env.NODE_ENV === 'production' 
+        ? 'An error occurred. Please try again later.' 
+        : err.message;
+        
+    res.status(statusCode).json({
+        status: 'error',
+        message: message
+    });
+});
+
+// Graceful shutdown handling
+const gracefulShutdown = () => {
+    logger.info('Received shutdown signal, closing connections...');
+    
+    server.close(() => {
+        logger.info('HTTP server closed');
+        
+        mongoose.connection.close(false, () => {
+            logger.info('MongoDB connection closed');
+            process.exit(0);
+        });
+        
+        // Force close after timeout
+        setTimeout(() => {
+            logger.error('Could not close connections in time, forcing shutdown');
+            process.exit(1);
+        }, 10000);
+    });
+};
+
+// Listen for shutdown signals
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+// Unhandled promise rejection handler
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Promise Rejection:', reason);
+    // In production, we don't want to crash the server
+    if (process.env.NODE_ENV !== 'production') {
+        throw reason;
+    }
+});
 
 // Start Server
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, async () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    logger.info(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
     await connectDB();
+    
+    if (process.env.NODE_ENV === 'production') {
+        logger.info(`Backend URL: ${process.env.BACKEND_URL || `http://localhost:${PORT}`}`);
+        logger.info(`Client URL: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
+    }
 });
 
-// ADD THIS FUNCTION AFTER THE SOCKET EVENT HANDLER
 // Helper function to update the last message in a user's chat if needed
 async function updateLastMessageIfNeeded(user, chatId, newLastMessage) {
     if (!user || !user.chats) return;
@@ -1270,10 +1353,51 @@ async function updateLastMessageIfNeeded(user, chatId, newLastMessage) {
     const chatToUpdate = user.chats.find(chat => chat.chatid === chatId);
     
     if (chatToUpdate) {
-        console.log(`🔄 Updating last message for user ${user.username} in chat ${chatId}`);
+        logger.debug(`🔄 Updating last message for user ${user.username} in chat ${chatId}`);
         chatToUpdate.lastmessage = newLastMessage;
         chatToUpdate.updatedat = new Date();
         await user.save();
-        console.log(`✅ Last message updated for user ${user.username}`);
+        logger.debug(`✅ Last message updated for user ${user.username}`);
     }
 }
+
+// Add a health check endpoint for Render
+app.get('/health', (req, res) => {
+    const healthCheck = {
+        uptime: process.uptime(),
+        message: 'OK',
+        timestamp: Date.now(),
+        environment: process.env.NODE_ENV || 'development'
+    };
+    
+    try {
+        // Check MongoDB connection
+        if (mongoose.connection.readyState === 1) {
+            healthCheck.database = 'Connected';
+        } else {
+            healthCheck.database = 'Disconnected';
+            healthCheck.message = 'Database connection issue';
+            
+            // In production, still return 200 to prevent unnecessary restarts
+            // but log the issue
+            if (process.env.NODE_ENV === 'production') {
+                logger.warn('Health check: Database disconnected but returning OK');
+            } else {
+                return res.status(503).json(healthCheck);
+            }
+        }
+        
+        res.status(200).json(healthCheck);
+    } catch (error) {
+        healthCheck.message = error.message;
+        healthCheck.error = error.name;
+        
+        // In production, still return 200 to prevent unnecessary restarts
+        if (process.env.NODE_ENV === 'production') {
+            logger.error('Health check error but returning OK:', error);
+            res.status(200).json(healthCheck);
+        } else {
+            res.status(503).json(healthCheck);
+        }
+    }
+});

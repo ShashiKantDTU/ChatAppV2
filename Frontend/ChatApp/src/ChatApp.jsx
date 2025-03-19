@@ -9,14 +9,6 @@ import RecentChats from './components/recentchats';
 import { useNavigate } from 'react-router-dom';
 import VideoCall from './components/VideoCall/VideoCall';
 
-
-// THERE ARE SOME ISSUES IN THE FRONTEND OF THE APP (LAYOUT PROBLEMS ) FIX THEM IN THIS CODE
-
-
-
-
-
-
 function ChatApp() {
     const { user, setUser } = useContext(AuthContext);
     const [socket, setSocket] = useState(null);
@@ -263,39 +255,34 @@ function ChatApp() {
     
     // Updates message in chat window
     const updateMessageInChat = useCallback((updatedMessage) => {
-      console.log('▶️ updateMessageInChat called:', updatedMessage);
-      
-      if (!socket) {
-        console.error('❌ Socket not available in updateMessageInChat');
-        return;
-      }
-      
-      setTalkingToUser(prev => {
-        console.log('▶️ Previous talkingToUser state:', prev);
-        
-        if (!prev || !prev.messages) {
-          console.error('❌ No previous state or messages in updateMessageInChat');
-          return prev;
+        // Remove sensitive data logs
+        if (!socket) {
+            console.error('Socket not available in updateMessageInChat');
+            return;
         }
         
-        const updatedState = {
-          ...prev,
-          messages: prev.messages.map(msg => {
-            // Compare IDs safely, handling both string and ObjectId cases
-            const isMatching = msg._id === updatedMessage._id || 
-                              String(msg._id) === String(updatedMessage._id);
-                              
-            if (isMatching) {
-              console.log('✅ Updating message in chat:', msg._id);
-              return updatedMessage;
+        setTalkingToUser(prev => {
+            if (!prev || !prev.messages) {
+                console.error('No previous state or messages in updateMessageInChat');
+                return prev;
             }
-            return msg;
-          })
-        };
-        
-        console.log('✅ New talkingToUser state:', updatedState);
-        return updatedState;
-      });
+            
+            const updatedState = {
+                ...prev,
+                messages: prev.messages.map(msg => {
+                    // Compare IDs safely, handling both string and ObjectId cases
+                    const isMatching = msg._id === updatedMessage._id || 
+                                      String(msg._id) === String(updatedMessage._id);
+                                      
+                    if (isMatching) {
+                        return updatedMessage;
+                    }
+                    return msg;
+                })
+            };
+            
+            return updatedState;
+        });
     }, [socket]);
     
     // Fetch chat messages
@@ -336,7 +323,6 @@ function ChatApp() {
         },
         
         "private message": (message) => {
-          console.log('Message received:', message);
           setNotificationCount((prev) => prev + 1);
           
           // Check if the user is currently viewing this chat
@@ -365,7 +351,6 @@ function ChatApp() {
               isread: true, 
               readat: new Date() 
             };
-            console.log('Automatically marking new message as read:', modifiedMessage._id);
           }
           
           socket.emit("private message recieve confirmation", modifiedMessage);
@@ -419,22 +404,16 @@ function ChatApp() {
         },
         
         "private message update": (message) => {
-          console.log('📣 Received private message update:', message);
+          // Remove verbose logs, keep only essential error logs
           
           // Check if this is a deletion message
           if (message.deletedfor && message.deletedfor.length > 0) {
-            console.log('🗑️ Message has been deleted for users:', message.deletedfor);
             
             // If deletedby is set, this was a "delete for everyone" action
             if (message.deletedby) {
-              console.log('👤 Message deleted by user:', message.deletedby);
-              
-              // For "delete for everyone", we need to make sure it's visible in the UI immediately
-              // regardless of whether the current user is viewing this chat
               
               // First, update the message in the current chat if applicable
               if (talkingToUser && talkingToUser.messages) {
-                console.log('🔄 Updating message in current chat view');
                 updateMessageInChat(message);
                 
                 // Check if this was the last message in this chat
@@ -443,7 +422,6 @@ function ChatApp() {
                    String(talkingToUser.messages[talkingToUser.messages.length - 1]._id) === String(message._id));
                 
                 if (isLastMessage && user.chats) {
-                  console.log('🔄 This was the last message in the chat, updating chat list');
                   // Update the chat list to show the message was deleted
                   const chatId = message.chatid;
                   
@@ -468,7 +446,6 @@ function ChatApp() {
                   const relevantChat = user.chats.find(chat => chat.chatid === chatId);
                   
                   if (relevantChat) {
-                    console.log('🔄 Updating chat list for non-active chat');
                     setUser(prev => {
                       if (!prev || !prev.chats) return prev;
                       
@@ -485,14 +462,6 @@ function ChatApp() {
                 }
               }
               
-              // If the user is not currently viewing this chat, show a notification
-              if (!talkingToUser || 
-                  (message.senderid !== talkingToUser.uid && message.recieverid !== talkingToUser.uid)) {
-                console.log('📢 User not viewing this chat, showing deletion notification');
-                // Optionally show a toast notification that a message was deleted
-                // toast.info('A message was deleted from one of your chats');
-              }
-              
               // Update the user data in case we need to refresh cached messages
               refreshUser();
               return;
@@ -500,13 +469,11 @@ function ChatApp() {
           }
           
           // For normal updates or "delete for me only", just update the message in the current chat
-          console.log('🔄 Updating message in local state');
           updateMessageInChat(message);
         },
         
         "private message update from server": (message) => {
           // This is kept for backward compatibility
-          console.log('📣 Received legacy private message update:', message);
           updateMessageInChat(message);
         },
         
@@ -540,7 +507,7 @@ function ChatApp() {
           });
         }
       };
-    }, [socket, user?.email, user?.uid, talkingToUser, refreshUser, updateMessageInChat]);
+    }, [socket, user?.email, user?.uid, talkingToUser, refreshUser, updateMessageInChat, generateChatId]);
     
     // Handle reaction add
     const handleReactionAdd = useCallback((messageId, reactionType, userId) => {
@@ -748,123 +715,95 @@ function ChatApp() {
     }, []);
 
     const handleDeleteMessage = useCallback((messageId, deleteType = 'for_me') => {
-      console.log('▶️ handleDeleteMessage called with:', { messageId, deleteType });
-      console.log('▶️ Socket available:', !!socket);
-      console.log('▶️ TalkingToUser available:', !!talkingToUser);
-      console.log('▶️ User available:', !!user);
-      
-      if (!socket || !talkingToUser || !user) {
-        console.error('❌ Missing required data:', { 
-          socket: !!socket, 
-          talkingToUser: !!talkingToUser, 
-          user: !!user 
-        });
-        return;
-      }
-      
-      // Find the message to update - ensure we're comparing the IDs correctly
-      // MongoDB ObjectIds need to be compared as strings
-      const messageToUpdate = talkingToUser.messages.find(msg => 
-        msg._id === messageId || String(msg._id) === String(messageId)
-      );
-      
-      if (!messageToUpdate) {
-        console.error('❌ Message not found:', messageId);
-        console.log('▶️ Available messages:', talkingToUser.messages.map(m => m._id));
-        return;
-      }
-      
-      console.log('✅ Found message to update:', messageToUpdate);
-      
-      // Create updated message with the appropriate delete settings
-      let updatedMessage;
-      
-      if (deleteType === 'for_everyone') {
-        console.log('▶️ Deleting for everyone');
-        // Delete for everyone
-        updatedMessage = {
-          ...messageToUpdate,
-          deletedfor: [...(messageToUpdate.deletedfor || []), user.uid, talkingToUser.uid],
-          deletedby: user.uid // Add who deleted it
-        };
+        // Remove verbose logs, keep only essential error logs
         
-        // If this is a media message, delete it from Cloudinary when deleting for everyone
-        if (messageToUpdate.media && messageToUpdate.media.cloudinary_id) {
-          console.log('▶️ Deleting media from Cloudinary:', messageToUpdate.media.cloudinary_id);
-          
-          // Delete the file from Cloudinary
-          const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-          
-          // Log the parameters we're sending to the server
-          console.log('▶️ API URL:', `${API_URL}/delete-file/${messageToUpdate.media.cloudinary_id}`);
-          
-          fetch(`${API_URL}/delete-file/${messageToUpdate.media.cloudinary_id}`, {
-            method: 'DELETE',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          })
-          .then(response => {
-            console.log('▶️ Cloudinary delete response status:', response.status);
-            return response.json();
-          })
-          .then(data => {
-            console.log('▶️ Cloudinary delete response data:', data);
-            if (data.success) {
-              console.log('✅ Successfully deleted file from Cloudinary');
-            } else {
-              console.error('❌ Failed to delete file from Cloudinary:', data.error);
-            }
-          })
-          .catch(error => {
-            console.error('❌ Error deleting file from Cloudinary:', error);
-          });
+        if (!socket || !talkingToUser || !user) {
+            console.error('Missing required data for message deletion');
+            return;
         }
         
-        // Check if this was the last message in the chat (based on local data)
-        // We'll update it in both the UI and send the update to the server
-        const isLastMessage = talkingToUser.messages[talkingToUser.messages.length - 1]._id === messageId;
-        if (isLastMessage && user.chats) {
-          console.log('▶️ This was the last message in the chat, updating local chat list');
-          // Find this chat in the user's chat list
-          const chatId = generateChatId(user.uid, talkingToUser.uid);
-          const chatToUpdate = user.chats.find(chat => chat.chatid === chatId);
-          
-          if (chatToUpdate) {
-            // Update the last message immediately for better UX
-            setUser(prev => {
-              if (!prev || !prev.chats) return prev;
-              
-              return {
-                ...prev,
-                chats: prev.chats.map(chat => 
-                  chat.chatid === chatId 
-                    ? { ...chat, lastmessage: "This message was deleted" }
-                    : chat
-                )
-              };
-            });
-          }
+        // Find the message to update - ensure we're comparing the IDs correctly
+        // MongoDB ObjectIds need to be compared as strings
+        const messageToUpdate = talkingToUser.messages.find(msg => 
+            msg._id === messageId || String(msg._id) === String(messageId)
+        );
+        
+        if (!messageToUpdate) {
+            console.error('Message not found for deletion:', messageId);
+            return;
         }
-      } else {
-        console.log('▶️ Deleting for current user only');
-        // Delete for me only
-        updatedMessage = {
-          ...messageToUpdate,
-          deletedfor: [...(messageToUpdate.deletedfor || []), user.uid]
-        };
-      }
-      
-      console.log('✅ Updated message:', updatedMessage);
-      
-      // Emit the update to the server
-      console.log('▶️ Emitting message update to socket');
-      socket.emit('private message update', updatedMessage);
-      
-      // Update the message locally
-      console.log('▶️ Updating message in chat locally');
-      updateMessageInChat(updatedMessage);
+        
+        // Create updated message with the appropriate delete settings
+        let updatedMessage;
+        
+        if (deleteType === 'for_everyone') {
+            // Delete for everyone
+            updatedMessage = {
+                ...messageToUpdate,
+                deletedfor: [...(messageToUpdate.deletedfor || []), user.uid, talkingToUser.uid],
+                deletedby: user.uid // Add who deleted it
+            };
+            
+            // If this is a media message, delete it from Cloudinary when deleting for everyone
+            if (messageToUpdate.media && messageToUpdate.media.cloudinary_id) {
+                // Delete the file from Cloudinary
+                const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+                
+                fetch(`${API_URL}/delete-file/${messageToUpdate.media.cloudinary_id}`, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        console.error('Failed to delete file from Cloudinary:', data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting file from Cloudinary:', error);
+                });
+            }
+            
+            // Check if this was the last message in the chat (based on local data)
+            // We'll update it in both the UI and send the update to the server
+            const isLastMessage = talkingToUser.messages[talkingToUser.messages.length - 1]._id === messageId;
+            if (isLastMessage && user.chats) {
+                // Find this chat in the user's chat list
+                const chatId = generateChatId(user.uid, talkingToUser.uid);
+                const chatToUpdate = user.chats.find(chat => chat.chatid === chatId);
+                
+                if (chatToUpdate) {
+                    // Update the last message immediately for better UX
+                    setUser(prev => {
+                        if (!prev || !prev.chats) return prev;
+                        
+                        return {
+                            ...prev,
+                            chats: prev.chats.map(chat => 
+                                chat.chatid === chatId 
+                                    ? { ...chat, lastmessage: "This message was deleted" }
+                                    : chat
+                            )
+                        };
+                    });
+                }
+            }
+        } else {
+            // Delete for me only
+            updatedMessage = {
+                ...messageToUpdate,
+                deletedfor: [...(messageToUpdate.deletedfor || []), user.uid]
+            };
+        }
+        
+        // Emit the update to the server
+        socket.emit('private message update', updatedMessage);
+        
+        // Update the message locally
+        updateMessageInChat(updatedMessage);
     }, [socket, talkingToUser, user, updateMessageInChat, generateChatId]);
     
     // Get sorted chats
@@ -985,7 +924,7 @@ function ChatApp() {
             socket.off('call-cancelled');
             socket.off('call-ended');
         };
-    }, [socket, user]);
+    }, [socket, user, callInfo]);
 
     // Handle accepting a call globally
     const handleGlobalAcceptCall = () => {
