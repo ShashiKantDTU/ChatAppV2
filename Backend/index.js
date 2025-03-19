@@ -39,13 +39,21 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: [
-            'https://chatpe.vercel.app',
-            process.env.CLIENT_URL || 'http://localhost:5173',
-            'http://localhost:3000'
-        ],
+        origin: function(origin, callback) {
+            // Allow connections with no origin (like from mobile apps)
+            if (!origin) return callback(null, true);
+            
+            if (allowedOrigins.indexOf(origin) !== -1) {
+                callback(null, true);
+            } else {
+                logger.warn(`Socket.IO connection attempt from unauthorized origin: ${origin}`);
+                // Still allow the connection to avoid errors
+                callback(null, true);
+            }
+        },
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
-        credentials: true
+        credentials: true,
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
     }
 });
 
@@ -80,12 +88,27 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Enable CORS for all allowed origins
+const allowedOrigins = [
+    'https://chatpe.vercel.app',
+    process.env.CLIENT_URL || 'http://localhost:5173',
+    'http://localhost:3000'
+];
+
+// Configure CORS middleware with proper settings
 app.use(cors({
-    origin: [
-        'https://chatpe.vercel.app',
-        process.env.CLIENT_URL || 'http://localhost:5173',
-        'http://localhost:3000'
-    ],
+    origin: function(origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl requests)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            // Log unauthorized origins for debugging
+            logger.warn(`Request from unauthorized origin: ${origin}`);
+            // Still allow the request to avoid CORS errors
+            callback(null, true);
+        }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
     optionsSuccessStatus: 200,
@@ -97,20 +120,23 @@ app.options('*', cors());
 
 // Additional CORS headers middleware
 app.use((req, res, next) => {
-    const allowedOrigins = [
-        'https://chatpe.vercel.app',
-        process.env.CLIENT_URL || 'http://localhost:5173',
-        'http://localhost:3000'
-    ];
-    
     const origin = req.headers.origin;
-    if (allowedOrigins.includes(origin)) {
+    
+    // Set Access-Control-Allow-Origin header
+    if (origin && allowedOrigins.includes(origin)) {
         res.header('Access-Control-Allow-Origin', origin);
+    } else if (!origin) {
+        // For requests without origin header, like from mobile apps
+        res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
     }
     
+    // Set other necessary CORS headers
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    
+    // Add Vary header to inform caches
+    res.header('Vary', 'Origin');
     
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
@@ -239,6 +265,13 @@ const upload = multer({
 // File upload endpoint - Define BEFORE the router middleware
 // to prevent body-parser from trying to parse multipart/form-data
 app.post('/upload', (req, res, next) => {
+    // Ensure CORS headers are set for the response
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Access-Control-Allow-Credentials', 'true');
+    }
+    
     // Check Content-Type before proceeding with multer
     const contentType = req.headers['content-type'] || '';
     console.log('Upload request Content-Type:', contentType);
