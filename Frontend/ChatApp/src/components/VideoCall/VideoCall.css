@@ -594,16 +594,62 @@
 }
 
 .error-message {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
   color: var(--call-error);
   text-align: center;
-  padding: 16px;
-  max-width: 100%;
-  overflow: hidden;
+  padding: 10px 16px;
+  max-width: 90%;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.7);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  font-weight: 500;
+  backdrop-filter: blur(3px);
+  border: 1px solid var(--call-error);
+  margin: 0 auto;
+  animation: fadeInDown 0.3s ease-out forwards;
+}
+
+.light-theme .error-message {
+  background-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--call-error);
+}
+
+.audio-only .error-message {
+  position: absolute;
+  top: 160px;
 }
 
 .compact .error-message {
-  padding: 8px;
+  top: 40px;
+  padding: 6px 12px;
   font-size: 12px;
+  max-width: 90%;
+}
+
+.collapsed .error-message {
+  top: 35px;
+  padding: 4px 8px;
+  font-size: 11px;
+  max-width: 80%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 .call-info {
@@ -916,4 +962,93 @@ body.has-collapsed-call .video-call-container {
 .light-theme .call-mode-button:hover,
 .light-theme .close-button:hover {
   background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Call Status Styles */
+.call-status {
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin: 0.5rem 0;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 150px;
+  transition: all 0.3s ease;
+}
+
+.call-status.initializing {
+  color: #ffd700;
+  animation: pulse 2s infinite;
+}
+
+.call-status.ringing {
+  color: #00ff00;
+  animation: pulse 1s infinite;
+}
+
+.call-status.connecting {
+  color: #00bfff;
+  animation: pulse 1.5s infinite;
+}
+
+.call-status.rejected {
+  color: #ff4444;
+  background: rgba(255, 68, 68, 0.1);
+}
+
+.call-status.failed {
+  color: #ff4444;
+  background: rgba(255, 68, 68, 0.1);
+}
+
+.call-status.ended {
+  color: #888;
+  background: rgba(136, 136, 136, 0.1);
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Dark theme adjustments */
+.dark-theme .call-status {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dark-theme .call-status.initializing {
+  background: rgba(255, 215, 0, 0.1);
+}
+
+.dark-theme .call-status.ringing {
+  background: rgba(0, 255, 0, 0.1);
+}
+
+.dark-theme .call-status.connecting {
+  background: rgba(0, 191, 255, 0.1);
+}
+
+.dark-theme .call-status.rejected {
+  background: rgba(255, 68, 68, 0.1);
+}
+
+.dark-theme .call-status.failed {
+  background: rgba(255, 68, 68, 0.1);
+}
+
+.dark-theme .call-status.ended {
+  background: rgba(136, 136, 136, 0.1);
 } 

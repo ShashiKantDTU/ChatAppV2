@@ -11,6 +11,7 @@
     background: var(--bg-primary);
     position: relative;
     border-radius: 16px;
+    max-height: 100%; /* Ensure container doesn't exceed parent height */
 }
 
 /* Header */
@@ -121,6 +122,7 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border-radius: 0 0 16px 16px;
+    max-height: calc(100% - 140px); /* Adjust based on header and search height */
 }
 
 .chatmessagebtn {

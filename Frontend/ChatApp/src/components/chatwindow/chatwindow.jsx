@@ -66,6 +66,55 @@ const ChatWindow = (props) => {
     // Call the hook to get forceUpdate function
     const forceUpdate = useForceUpdate();
 
+    // Add state to track remote user's online status
+    const [remoteUserStatus, setRemoteUserStatus] = useState({
+        online: props.userdata?.onlinestatus?.online || false,
+        lastSeen: props.userdata?.onlinestatus?.lastSeen || new Date()
+    });
+    
+    // Interval to update remote user's online status
+    useEffect(() => {
+        if (!props.socket || !props.userdata?.uid) return;
+        
+        // Initialize with current status
+        setRemoteUserStatus({
+            online: props.userdata?.onlinestatus?.online || false,
+            lastSeen: props.userdata?.onlinestatus?.lastSeen || new Date()
+        });
+        
+        // Function to fetch user status
+        const fetchUserStatus = () => {
+            props.socket.emit('get-user-status', props.userdata.uid);
+        };
+        
+        // Set up listener for status updates
+        props.socket.on('user-status-update', (data) => {
+            if (data.userId === props.userdata.uid) {
+                setRemoteUserStatus({
+                    online: data.status.online,
+                    lastSeen: data.status.lastSeen
+                });
+            }
+        });
+        
+        // Fetch immediately and then set interval
+        fetchUserStatus();
+        const statusInterval = setInterval(fetchUserStatus, 30000); // Update every 30 seconds
+        
+        return () => {
+            clearInterval(statusInterval);
+            props.socket.off('user-status-update');
+        };
+    }, [props.socket, props.userdata?.uid]);
+    
+    // Update status when props change (switching chats)
+    useEffect(() => {
+        setRemoteUserStatus({
+            online: props.userdata?.onlinestatus?.online || false,
+            lastSeen: props.userdata?.onlinestatus?.lastSeen || new Date()
+        });
+    }, [props.userdata?.uid, props.userdata?.onlinestatus]);
+
     // console.log('chat time converted',formatChatTime('2025-02-28T10:07:36.102Z'))
 
     // WE ARE GETTING USER DATA FROM PARENT COMPONENT THAT IS DETAILS OF RECIEVER USER
@@ -1000,6 +1049,15 @@ const ChatWindow = (props) => {
             }
         });
         
+        props.socket.on('call-cancelled', (data) => {
+            // Only handle if this is related to a call we're receiving
+            if (data.calleeId === props.localUser.uid && data.callerId === props.userdata.uid) {
+                console.log('Call cancelled by caller before pickup');
+                setShowCallUI(false);
+                setCallInfo(null);
+            }
+        });
+        
         props.socket.on('call-ended', (data) => {
             // Only handle if this is related to a call we're in
             if ((data.calleeId === props.userdata.uid && data.callerId === props.localUser.uid) ||
@@ -1013,6 +1071,7 @@ const ChatWindow = (props) => {
         return () => {
             props.socket.off('call-accepted');
             props.socket.off('call-rejected');
+            props.socket.off('call-cancelled');
             props.socket.off('call-ended');
         };
     }, [props.socket, props.userdata, props.localUser]);
@@ -1089,7 +1148,7 @@ const ChatWindow = (props) => {
                     <img src={`${props.userdata.profilepicture}`} alt='props.userdata' className='chatheaderimg' />
                     <div>
                         <h3>{props.userdata.name}</h3>
-                        <p>{props.userdata?.onlinestatus.online ? <span style={{color:'green'}} >Online</span> : formatChatTime(props.userdata.onlinestatus.lastSeen)}</p>
+                        <p>{remoteUserStatus.online ? <span style={{color:'green'}} >Online</span> : formatChatTime(remoteUserStatus.lastSeen)}</p>
                     </div>
                 </div>
                 <div className='chatheaderright'>

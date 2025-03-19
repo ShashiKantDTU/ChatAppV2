@@ -355,60 +355,70 @@ io.on('connection', (socket) => {
 
 
     socket.on('registersocket', async (email) => {
+        console.log('Socket registered for user:', email);
+
         try {
-            // Find the user
-            const user = await User.findOne({ email });
+            const user = await User.findOne({ email: email });
+
             if (!user) {
-                console.error('User not found for email:', email);
+                console.log('User not found');
                 return;
             }
 
-            // Update online status
             user.socketid = socket.id;
-            user.onlinestatus = { status: true, lastSeen: new Date() };
+            user.onlinestatus.status = true;
+            await user.save();
 
-            // Set default profile picture if none exists
-            if (!user.profilepicture) {
-                user.profilepicture = `https://api.dicebear.com/7.x/bottts/svg?seed=${user.uid}`;
+            // Emit user details back to the user
+            socket.emit('YourDetails', {
+                username: user.username,
+                profilepicture: user.profilepicture,
+                uid: user.uid,
+                chats: user.chats,
+                friends: user.friends,
+                onlinestatus: {
+                    status: user.onlinestatus.status,
+                    lastseen: user.onlinestatus.lastseen
+                },
+                email: user.email,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+            });
+
+            // Emit user status change to all users who might be chatting with this user
+            // Find chats this user is participating in
+            const usersToNotify = new Set();
+            
+            // Get users from this user's chats
+            if (user.chats && user.chats.length > 0) {
+                user.chats.forEach(chat => {
+                    // Extract other user ID from chat ID
+                    const chatId = chat.chatid;
+                    if (chatId.length >= 8) {
+                        const id1 = chatId.slice(0, 4);
+                        const id2 = chatId.slice(4, 8);
+                        const otherUserId = id1 === user.uid ? id2 : id1;
+                        usersToNotify.add(otherUserId);
+                    }
+                });
+            }
+            
+            // Get connected sockets for these users
+            for (const otherUserId of usersToNotify) {
+                const otherUser = await User.findOne({ uid: otherUserId });
+                if (otherUser && otherUser.socketid) {
+                    io.to(otherUser.socketid).emit('user-status-update', {
+                        userId: user.uid,
+                        status: {
+                            online: true,
+                            lastSeen: new Date()
+                        }
+                    });
+                }
             }
 
-            // // HANDLE ANY PENDING MESSAGE FOR CLIENT
-            // const pendingMessages = syncmessage.find({ whomtosend: user.uid });
-            // if (pendingMessages) {
-            //     for (const message of pendingMessages) {
-            //         const messagetosend = {
-            //             chatid: message.chatid,
-            //             senderid: message.senderid,
-            //             recieverid: message.recieverid,
-            //             groupid: message.groupid,
-            //             messagetext: message.messagetext,
-            //             sent: message.sent,
-            //             delivered: message.delivered,
-            //             read: message.read,
-            //             deletedfor: message.deletedfor,
-            //             deletedby: message.deletedby,
-            //             reactions: message.reactions
-            //         }
-            //         io.to(socket.id).emit('private sync message', messagetosend);
-            //     }
-            //     pendingMessages.deleteMany();
-            // }
-
-            // // Notify the sender about delivery
-            // const senderSocket = await User.findOne({ uid: msg.senderid });
-            // if (senderSocket && senderSocket.onlinestatus.status) {
-            //     io.to(senderSocket.socketid).emit('private message update from server', msg);
-            // }
-
-
-
-
-            // Save user and emit details
-            await user.save();
-            io.to(socket.id).emit('YourDetails', user);
-
         } catch (error) {
-            console.error('Error in registersocket handler:', error);
+            console.error('Error registering socket:', error);
         }
     });
 
@@ -732,7 +742,38 @@ io.on('connection', (socket) => {
         user.socketid = '';
         user.onlinestatus.status = false;
         user.onlinestatus.lastseen = new Date();
-        user.save();
+        await user.save();
+        
+        // Notify other users who might be chatting with this user
+        const usersToNotify = new Set();
+        
+        // Get users from this user's chats
+        if (user.chats && user.chats.length > 0) {
+            user.chats.forEach(chat => {
+                // Extract other user ID from chat ID
+                const chatId = chat.chatid;
+                if (chatId.length >= 8) {
+                    const id1 = chatId.slice(0, 4);
+                    const id2 = chatId.slice(4, 8);
+                    const otherUserId = id1 === user.uid ? id2 : id1;
+                    usersToNotify.add(otherUserId);
+                }
+            });
+        }
+        
+        // Get connected sockets for these users
+        for (const otherUserId of usersToNotify) {
+            const otherUser = await User.findOne({ uid: otherUserId });
+            if (otherUser && otherUser.socketid) {
+                io.to(otherUser.socketid).emit('user-status-update', {
+                    userId: user.uid,
+                    status: {
+                        online: false,
+                        lastSeen: new Date()
+                    }
+                });
+            }
+        }
     });
 
     socket.on('request user', async (uid) => {
@@ -778,6 +819,31 @@ io.on('connection', (socket) => {
     socket.on('typing-stop', (data) => {
         // Broadcast to all other users in the same room/channel
         socket.broadcast.emit('typing-stop', data);
+    });
+
+    // Handle requests for user online status
+    socket.on('get-user-status', async (userId) => {
+        try {
+            // Find the requested user
+            const requestedUser = await User.findOne({ uid: userId });
+            
+            if (!requestedUser) {
+                console.error('User not found for status request:', userId);
+                return;
+            }
+            
+            // Send back the user's online status
+            socket.emit('user-status-update', {
+                userId: userId,
+                status: {
+                    online: requestedUser.socketid ? true : false,
+                    lastSeen: requestedUser.onlinestatus.lastseen
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error fetching user status:', error);
+        }
     });
 
 
@@ -1007,6 +1073,32 @@ io.on('connection', (socket) => {
             }
         } catch (error) {
             console.error('Error in call-rejected handler:', error);
+        }
+    });
+    
+    socket.on('call-cancelled', async (data) => {
+        try {
+            console.log('Call cancelled before pickup:', data);
+            
+            const { callerId, calleeId } = data;
+            
+            // Find all callee's active sessions
+            const calleeSessions = await User.find({
+                uid: calleeId,
+                socketid: { $ne: null, $ne: '' }
+            });
+            
+            // Notify all callee's active sessions that call was cancelled
+            for (const session of calleeSessions) {
+                if (session.socketid) {
+                    io.to(session.socketid).emit('call-cancelled', {
+                        callerId,
+                        calleeId
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error in call-cancelled handler:', error);
         }
     });
     

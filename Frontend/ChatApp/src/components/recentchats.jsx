@@ -4,6 +4,7 @@ import ProfileHeader from "./profileheader";
 import EditProfileModal from "./EditProfileModal";
 
 // Skeleton UI component for loading state
+// This can be used directly in places where we need to show a skeleton loader
 const SkeletonRecentChats = () => {
   return (
     <div className={styles.recentChatsContainer}>
@@ -54,10 +55,10 @@ const RecentChats = (props) => {
   useEffect(() => {  
     if (props.user) {
       setUser(prev => ({ ...prev, ...props.user }));
-      // Set loading state based on whether chats array exists and has loaded
-      setIsLoading(!props.user.chats || props.user.chats.length === 0);
+      // Only show skeleton UI during initial loading, not during data refreshes
+      setIsLoading(props.isDataLoading && !props.initialLoadComplete);
     }
-  }, [props.user]);
+  }, [props.user, props.isDataLoading, props.initialLoadComplete]);
 
   useEffect(() => {
     if (user.chats) {
@@ -86,7 +87,29 @@ const RecentChats = (props) => {
           onEditProfile={() => setShowEditProfile(true)}
           isLoading={true}
         />
-        <SkeletonRecentChats />
+        <div className={styles.recentChatsContainer}>
+          <div className={styles.recentChatsHeader}>
+            <div className={`${styles.skeletonText} ${styles.skeletonTitle}`}></div>
+            <div className={`${styles.skeletonButton}`}></div>
+          </div>
+          
+          <div className={styles.searchContainer}>
+            <div className={`${styles.skeletonSearch}`}></div>
+          </div>
+          
+          <div className={styles.chatList}>
+            {[...Array(5)].map((_, index) => (
+              <div className={styles.skeletonChatItem} key={index}>
+                <div className={styles.skeletonAvatar}></div>
+                <div className={styles.skeletonContent}>
+                  <div className={styles.skeletonName}></div>
+                  <div className={styles.skeletonMessage}></div>
+                </div>
+                <div className={styles.skeletonTime}></div>
+              </div>
+            ))}
+          </div>
+        </div>
       </>
     );
   }
@@ -230,7 +253,7 @@ const RecentChats = (props) => {
         />
       )}
 
-      <div className={styles.recentChatsContainer}>
+      <div className={styles.recentChatsContainer} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <div className={styles.recentChatsHeader}>
           <h2>Recent Chats</h2>
           <button onClick={props.handlesearchbtn} className={styles.newChatButton}>+ New Chat</button>
@@ -246,8 +269,21 @@ const RecentChats = (props) => {
           />
         </div>
 
-        <div className={styles.chatList}>
-          {filteredChats.length === 0 ? (
+        <div className={styles.chatList} style={{ maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
+          {isLoading ? (
+            // Show skeleton UI during initial loading
+            [...Array(5)].map((_, index) => (
+              <div className={styles.skeletonChatItem} key={index}>
+                <div className={styles.skeletonAvatar}></div>
+                <div className={styles.skeletonContent}>
+                  <div className={styles.skeletonName}></div>
+                  <div className={styles.skeletonMessage}></div>
+                </div>
+                <div className={styles.skeletonTime}></div>
+              </div>
+            ))
+          ) : filteredChats.length === 0 ? (
+            // Show 'No Chats' UI when data is loaded but there are no chats
             <div className={styles.noChatsContainer}>
               <div className={styles.noChatsIcon}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -264,6 +300,7 @@ const RecentChats = (props) => {
               </button>
             </div>
           ) : (
+            // Show chat list when there are chats
             filteredChats.map((chat) => (
               <button 
                 onClick={() => props.handlechatclick("", chat.chatid, user)} 
@@ -286,7 +323,7 @@ const RecentChats = (props) => {
             ))
           )}
           
-          {filteredChats.length === 0 && searchQuery && (
+          {!isLoading && filteredChats.length === 0 && searchQuery && (
             <div className={styles.noResults}>
               <p>No chats found matching "{searchQuery}"</p>
             </div>

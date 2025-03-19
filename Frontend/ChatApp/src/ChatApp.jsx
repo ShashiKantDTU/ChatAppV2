@@ -31,6 +31,10 @@ function ChatApp() {
         const savedTheme = localStorage.getItem('theme');
         return savedTheme ? savedTheme === 'dark' : true;
     });
+    // Add state to track data loading status
+    const [isDataLoading, setIsDataLoading] = useState(true);
+    // Add state to track initial data load completion
+    const [initialLoadComplete, setInitialLoadComplete] = useState(false);
     // Global call state variables
     const [showGlobalCallUI, setShowGlobalCallUI] = useState(false);
     const [isIncomingCall, setIsIncomingCall] = useState(false);
@@ -163,9 +167,18 @@ function ChatApp() {
           return;
         }
         
+        // Only set full loading state if initial load isn't complete
+        if (!initialLoadComplete) {
+          setIsDataLoading(true);
+        }
+        
         socket.emit('request user', uid);
         
         socket.once('send user', (userData) => {
+          if (!initialLoadComplete) {
+            setInitialLoadComplete(true);
+          }
+          setIsDataLoading(false);
           if (!userData) {
             reject('User not found');
           } else {
@@ -173,13 +186,18 @@ function ChatApp() {
           }
         });
       });
-    }, [socket]);
+    }, [socket, initialLoadComplete]);
     
     // Function to refresh and update user data
     const refreshUser = useCallback(async () => {
       if (!user?.uid || !socket) return;
 
       try {
+        // Don't show loading UI for refreshes after initial load
+        if (!initialLoadComplete) {
+          setIsDataLoading(true);
+        }
+        
         await new Promise(resolve => setTimeout(resolve, 3000)); // Delay of 3 seconds
         const updatedUser = await fetchUser(user.uid);
         
@@ -211,8 +229,31 @@ function ChatApp() {
         });
       } catch (error) {
         console.error('Error refreshing user data:', error);
+      } finally {
+        setIsDataLoading(false);
       }
-    }, [fetchUser, user?.uid, setUser, socket]);
+    }, [fetchUser, user?.uid, setUser, socket, initialLoadComplete]);
+    
+    // Add initial data loading useEffect
+    useEffect(() => {
+      if (user?.uid && socket) {
+        // Set initial loading state
+        setIsDataLoading(true);
+        
+        // Initial fetch of user data
+        fetchUser(user.uid)
+          .then(userData => {
+            setUser(prev => ({ ...prev, ...userData }));
+            setInitialLoadComplete(true);
+          })
+          .catch(error => {
+            console.error('Error fetching initial user data:', error);
+          })
+          .finally(() => {
+            setIsDataLoading(false);
+          });
+      }
+    }, [user?.uid, socket, fetchUser, setUser]);
     
     // Generate chat ID from two user IDs
     const generateChatId = useCallback((uid1, uid2) => {
@@ -286,6 +327,8 @@ function ChatApp() {
       const eventHandlers = {
         "YourDetails": (userData) => {
           setUser(prev => ({ ...prev, ...userData }));
+          setIsDataLoading(false);
+          setInitialLoadComplete(true);
         },
 
         "private sync message": () => {
@@ -918,6 +961,17 @@ function ChatApp() {
             setCallInfo(null);
         });
         
+        socket.on('call-cancelled', (data) => {
+            console.log('Call was cancelled by caller before pickup');
+            // Only handle if this is related to our call
+            if (callInfo && data.callerId === callInfo.callerId) {
+                setShowGlobalCallUI(false);
+                setCallInfo(null);
+                setIsIncomingCall(false);
+                setCallType('video');
+            }
+        });
+        
         socket.on('call-ended', () => {
             setShowGlobalCallUI(false);
             setCallInfo(null);
@@ -928,6 +982,7 @@ function ChatApp() {
             socket.off('incoming-call');
             socket.off('call-accepted');
             socket.off('call-rejected');
+            socket.off('call-cancelled');
             socket.off('call-ended');
         };
     }, [socket, user]);
@@ -1168,6 +1223,8 @@ function ChatApp() {
               notifications={notificationcount}
               refreshUser= {refreshUser}
               handleDeleteChat={handleDeleteChat}
+              isDataLoading={isDataLoading}
+              initialLoadComplete={initialLoadComplete}
             />
           </div>
 

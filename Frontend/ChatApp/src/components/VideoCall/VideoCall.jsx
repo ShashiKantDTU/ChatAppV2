@@ -58,6 +58,7 @@ const VideoCall = ({
   const [isCallActive, setIsCallActive] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [callStatus, setCallStatus] = useState('initializing'); // Add this line
   
   // Media controls
   const [isMuted, setIsMuted] = useState(false);
@@ -521,15 +522,18 @@ const VideoCall = ({
   const startOutgoingCall = () => {
     if (!socket) return;
     
-    // Use callType directly rather than the potentially stale isAudioOnly state
     const isAudioOnlyCall = callType === 'audio';
     
     console.log(`Starting outgoing call: callType=${callType}, isAudioOnly=${isAudioOnlyCall}`);
+    
+    // Set initial status
+    setCallStatus('ringing');
     
     // Set a timeout to end the call if not picked up within 45 seconds
     callTimeoutRef.current = setTimeout(() => {
       console.log('Call timeout reached (45 seconds) - ending unanswered call');
       setError('Call not answered. Please try again later.');
+      setCallStatus('ended');
       // Wait 2 seconds to show the error message before closing
       setTimeout(() => {
         cleanupCall();
@@ -559,15 +563,29 @@ const VideoCall = ({
           callTimeoutRef.current = null;
         }
         
+        setCallStatus('connecting');
         setIsCallActive(true);
         startCallTimer();
         
         // Now create peer connection and send offer
         await createPeerConnection();
       });
+      
+      // Listen for call-rejected event
+      socket.once('call-rejected', (data) => {
+        console.log('Call rejected:', data);
+        setCallStatus('rejected');
+        setError('Call was rejected');
+        setTimeout(() => {
+          cleanupCall();
+          onClose();
+        }, 2000);
+      });
+      
     } catch (socketError) {
       console.error('Error initiating call via socket:', socketError);
       setError('Failed to start call. Please check your connection and try again.');
+      setCallStatus('failed');
       
       // Clear the timeout
       if (callTimeoutRef.current) {
@@ -586,6 +604,7 @@ const VideoCall = ({
     if (!socket) return;
     
     try {
+      setCallStatus('connecting');
       // Initialize local media first
       await initializeCall();
       
@@ -605,6 +624,7 @@ const VideoCall = ({
     } catch (err) {
       console.error('Error accepting call:', err);
       setError('Failed to accept call. Please try again.');
+      setCallStatus('failed');
     }
   };
   
@@ -1402,6 +1422,7 @@ const VideoCall = ({
   // Handle rejection/ending call
   const handleEndCall = () => {
     console.log('Ending call and notifying remote peer');
+    setCallStatus('ended');
     
     // Clear the call timeout if it exists
     if (callTimeoutRef.current) {
@@ -1409,13 +1430,24 @@ const VideoCall = ({
       callTimeoutRef.current = null;
     }
     
-    // Before cleanup, send call-ended event to notify the other user
+    // Before cleanup, send appropriate event to notify the other user
     if (socket) {
       try {
-        socket.emit('call-ended', {
-          callerId: isIncoming ? caller.uid : localUser.uid,
-          calleeId: isIncoming ? localUser.uid : callee.uid
-        });
+        // Check if this is an outgoing call that hasn't been answered yet
+        if (!isIncoming && !isCallActive) {
+          // This is a call cancellation before it was answered
+          console.log('Cancelling unanswered outgoing call');
+          socket.emit('call-cancelled', {
+            callerId: localUser.uid,
+            calleeId: callee.uid
+          });
+        } else {
+          // Normal call end (after it was established or for incoming calls)
+          socket.emit('call-ended', {
+            callerId: isIncoming ? caller.uid : localUser.uid,
+            calleeId: isIncoming ? localUser.uid : callee.uid
+          });
+        }
         
         // Give a small delay to let the message go through before cleanup
         setTimeout(() => {
@@ -1423,7 +1455,7 @@ const VideoCall = ({
           onClose();
         }, 100);
       } catch (socketError) {
-        console.error('Error sending call-ended event:', socketError);
+        console.error('Error sending call end notification:', socketError);
         cleanupCall();
         onClose();
       }
@@ -1437,110 +1469,37 @@ const VideoCall = ({
   const cleanupCall = () => {
     console.log('Cleaning up call resources and resetting states');
     
-    // Reset initialization flag
-    callInitializedRef.current = false;
-    
-    // Clear the call timeout if it exists
-    if (callTimeoutRef.current) {
-      clearTimeout(callTimeoutRef.current);
-      callTimeoutRef.current = null;
-    }
-    
-    // Stop the timer
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    
-    // Reset media states
-    setIsCallActive(false);
-    setIsLoading(false);
-    setError(null);
-    setIsMuted(false);
-    setIsVideoEnabled(callType === 'video'); // Reset to original value based on callType
-    setIsAudioOnly(callType === 'audio'); // Reset to original value based on callType
-    setCallDuration(0);
-    
-    // Remove any socket event listeners for specific call events
-    if (socket) {
-      // Not removing the main socket listeners managed by useEffect hooks
-      // But we can explicitly remove one-time listeners if needed
-      socket.off('call-accepted');
-      socket.off('call-offer');
-      socket.off('call-answer');
-      socket.off('call-ended');
-    }
-    
-    // Reset SDP state
-    remoteSdpSet.current = false;
-    
-    // Clear pending ICE candidates
-    setPendingIceCandidates([]);
-    
-    // Close the peer connection
-    if (peerConnectionRef.current) {
-      try {
-        // First close all tracks to ensure proper cleanup
-        const senders = peerConnectionRef.current.getSenders();
-        senders.forEach(sender => {
-          if (sender.track) {
-            sender.track.stop();
-          }
-        });
-        
-        // Then close the connection
+    try {
+      // Stop all media tracks
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
+        remoteVideoRef.current.getTracks().forEach(track => track.stop());
+      }
+
+      // Close peer connection
+      if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
-      } catch (err) {
-        console.error('Error closing peer connection:', err);
-      } finally {
-        peerConnectionRef.current = null;
       }
-    }
-    
-    // Stop all tracks in the local stream
-    if (localStreamRef.current) {
-      try {
-        localStreamRef.current.getTracks().forEach(track => {
-          track.stop();
-        });
-      } catch (err) {
-        console.error('Error stopping local tracks:', err);
-      } finally {
-        localStreamRef.current = null;
-      }
-    }
-    
-    // Reset video elements
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-    
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
-    
-    // Reset audio element for audio-only calls
-    if (audioElementRef.current) {
-      audioElementRef.current.srcObject = null;
-      audioElementRef.current.pause();
-    }
-    
-    // Close any audio contexts
-    if (audioContextRef.current) {
-      try {
+
+      // Close audio context only if it's not already closed
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
-      } catch (err) {
-        console.error('Error closing audio context:', err);
       }
+
+      // Reset all refs and state
+      localStreamRef.current = null;
+      remoteVideoRef.current = null;
+      peerConnectionRef.current = null;
+      audioContextRef.current = null;
+      setIsCallActive(false);
+      
+      console.log('Call cleanup completed');
+    } catch (error) {
+      console.error('Error during cleanup:', error);
     }
-    
-    // Stop audio monitoring
-    if (audioMonitoringIntervalRef.current) {
-      clearInterval(audioMonitoringIntervalRef.current);
-      audioMonitoringIntervalRef.current = null;
-    }
-    
-    console.log('Call cleanup completed');
   };
   
   // Toggle microphone
@@ -2241,6 +2200,40 @@ const VideoCall = ({
     };
   }, [socket, isOpen, isIncoming, caller, callee, localUser]);
 
+  // Add a useEffect for handling call cancellation
+  useEffect(() => {
+    if (!socket || !isOpen) return;
+    
+    // Handler for call-cancelled event from the caller
+    const handleCallCancelled = (data) => {
+      console.log('Call was cancelled by caller:', data);
+      
+      // Check if this event is for our call
+      const isForUs = (isIncoming && 
+                       data.callerId === caller.uid && 
+                       data.calleeId === localUser.uid);
+      
+      if (isForUs) {
+        console.log('Incoming call was cancelled before pickup, cleaning up resources');
+        setError('Call was cancelled by the caller');
+        
+        // Short delay to show the message before closing
+        setTimeout(() => {
+          cleanupCall();
+          onClose();
+        }, 1500);
+      }
+    };
+    
+    // Listen for call-cancelled events
+    socket.on('call-cancelled', handleCallCancelled);
+    
+    return () => {
+      // Remove listener when component unmounts or isOpen changes
+      socket.off('call-cancelled', handleCallCancelled);
+    };
+  }, [socket, isOpen, isIncoming, caller, localUser]);
+
   // Function to toggle UI mode
   const toggleUiMode = () => {
     let newMode;
@@ -2312,6 +2305,13 @@ const VideoCall = ({
   const callContent = (
     <div className={`video-call-container ${isOpen ? 'active' : ''} ${uiMode} ${isDarkMode ? 'dark-theme' : 'light-theme'}`} style={{ transform: 'translateY(0)' }}>
       <div className="video-call-content">
+        {/* Centralized Error Message - Always visible when there's an error */}
+        {error && (
+          <div className="error-message">
+            <p>{error}</p>
+          </div>
+        )}
+        
         <div className="video-call-header">
           <h3>
             {isCallActive
@@ -2320,6 +2320,18 @@ const VideoCall = ({
                 ? `Incoming ${isAudioOnly ? 'Voice' : 'Video'} Call`
                 : `${isAudioOnly ? 'Calling' : 'Video Calling'}...`}
           </h3>
+          
+          {/* Call Status Display */}
+          {!isCallActive && (
+            <div className={`call-status ${callStatus}`}>
+              {callStatus === 'initializing' && 'Initializing...'}
+              {callStatus === 'ringing' && 'Ringing...'}
+              {callStatus === 'connecting' && 'Connecting...'}
+              {callStatus === 'rejected' && 'Call Rejected'}
+              {callStatus === 'failed' && 'Call Failed'}
+              {callStatus === 'ended' && 'Call Ended'}
+            </div>
+          )}
           
           {/* Enhanced Call Duration Display */}
           {isCallActive && (
@@ -2476,11 +2488,6 @@ const VideoCall = ({
                   <p>Connecting...</p>
                 </div>
               )}
-              {error && (
-                <div className="error-message">
-                  <p>{error}</p>
-                </div>
-              )}
             </div>
           ) : (
             <>
@@ -2489,10 +2496,6 @@ const VideoCall = ({
                   <div className="loading-indicator">
                     <div className="spinner"></div>
                     <p>Connecting...</p>
-                  </div>
-                ) : error ? (
-                  <div className="error-message">
-                    <p>{error}</p>
                   </div>
                 ) : (
                   <video
