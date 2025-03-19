@@ -114,9 +114,10 @@ const RecentChats = (props) => {
 
       const hasProfileImage = dataToSend.has('profileImage') && dataToSend.get('profileImage') instanceof File;
       
+      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
       const endpoint = hasProfileImage 
-        ? 'http://localhost:3000/update-profile-image' 
-        : 'http://localhost:3000/update-profile';
+        ? `${API_URL}/update-profile-image` 
+        : `${API_URL}/update-profile`;
         
       const response = await fetch(endpoint, {
         method: 'PUT',
