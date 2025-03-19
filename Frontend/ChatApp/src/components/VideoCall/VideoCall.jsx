@@ -1576,7 +1576,8 @@ const VideoCall = ({
         video: {
           facingMode: { exact: newFacingMode },
           width: { ideal: 640 },
-          height: { ideal: 480 }
+          height: { ideal: 480 },
+          frameRate: { ideal: 30 }
         },
         audio: false // Don't request audio again since we already have it
       };
@@ -1592,6 +1593,8 @@ const VideoCall = ({
       // Update video element
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = newStream;
+        // Ensure the video plays
+        await localVideoRef.current.play().catch(e => console.warn('Play failed:', e));
       }
       
       // Replace the track in the peer connection
@@ -1624,7 +1627,16 @@ const VideoCall = ({
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
           const videoDevices = devices.filter(device => device.kind === 'videoinput');
-          setIsCameraSupported(videoDevices.length > 1);
+          const hasMultipleCameras = videoDevices.length > 1;
+          const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+          
+          // Only enable camera switching on mobile devices with multiple cameras
+          setIsCameraSupported(hasMultipleCameras && isMobileDevice);
+          
+          if (hasMultipleCameras) {
+            console.log(`Found ${videoDevices.length} video devices:`, 
+              videoDevices.map(d => `${d.label || 'Unknown'} (${d.deviceId})`));
+          }
         } catch (err) {
           console.error('Error checking camera support:', err);
           setIsCameraSupported(false);

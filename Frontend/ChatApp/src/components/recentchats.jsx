@@ -119,6 +119,17 @@ const RecentChats = (props) => {
         ? `${API_URL}/update-profile-image` 
         : `${API_URL}/update-profile`;
         
+      console.log('Sending profile update to:', endpoint);
+      console.log('Has profile image:', hasProfileImage);
+      if (hasProfileImage) {
+        const file = dataToSend.get('profileImage');
+        console.log('Profile image details:', {
+          name: file.name,
+          type: file.type,
+          size: file.size
+        });
+      }
+        
       const response = await fetch(endpoint, {
         method: 'PUT',
         credentials: 'include',
@@ -127,10 +138,12 @@ const RecentChats = (props) => {
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('Profile update failed:', errorData);
         throw new Error(errorData.message || 'Failed to update profile');
       }
 
       const data = await response.json();
+      console.log('Profile update successful:', data);
 
       setUser(prev => ({
         ...prev,

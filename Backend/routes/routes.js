@@ -252,9 +252,11 @@ const profileStorage = new CloudinaryStorage({
         folder: 'profile_pictures',
         allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
         transformation: [
-            { width: 400, height: 400, crop: 'limit' },
-            { quality: 'auto' }
-        ]
+            { width: 400, height: 400, crop: 'fill', gravity: 'face' },
+            { quality: 'auto:good' },
+            { fetch_format: 'auto' }
+        ],
+        resource_type: 'auto'
     }
 });
 
@@ -266,8 +268,10 @@ const profileUpload = multer({
     fileFilter: function (req, file, cb) {
         // Accept only images
         if (!file.mimetype.startsWith('image/')) {
+            console.error('Invalid file type:', file.mimetype);
             return cb(new Error('Only image files are allowed!'), false);
         }
+        console.log('File accepted:', file.originalname, file.mimetype);
         cb(null, true);
     }
 });
@@ -276,7 +280,10 @@ const profileUpload = multer({
 router.put('/update-profile-image', verifyJWT, (req, res, next) => {
     // Check Content-Type for multipart/form-data
     const contentType = req.headers['content-type'] || '';
+    console.log('Received content type:', contentType);
+    
     if (!contentType.includes('multipart/form-data')) {
+        console.error('Invalid content type received:', contentType);
         return res.status(400).json({
             success: false,
             error: 'Invalid Content-Type. Expected multipart/form-data but received: ' + contentType,
@@ -295,6 +302,7 @@ router.put('/update-profile-image', verifyJWT, (req, res, next) => {
         // Find the user
         const user = await User.findOne({ uid: userId });
         if (!user) {
+            console.error('User not found:', userId);
             return res.status(404).json({ message: 'User not found' });
         }
 
@@ -305,8 +313,9 @@ router.put('/update-profile-image', verifyJWT, (req, res, next) => {
 
         // Update profile picture if a file was uploaded
         if (req.file && req.file.path) {
+            console.log('New profile picture path:', req.file.path);
+            
             // Delete the old profile picture from Cloudinary if it exists
-            // Extract public_id from the existing profile picture URL
             if (user.profilepicture && user.profilepicture.includes('cloudinary')) {
                 try {
                     const urlParts = user.profilepicture.split('/');
@@ -328,6 +337,7 @@ router.put('/update-profile-image', verifyJWT, (req, res, next) => {
         }
 
         await user.save();
+        console.log('Profile updated successfully');
 
         res.json({
             message: 'Profile updated successfully',
@@ -338,7 +348,11 @@ router.put('/update-profile-image', verifyJWT, (req, res, next) => {
         });
     } catch (error) {
         console.error('Error updating profile with image:', error);
-        res.status(500).json({ message: 'Failed to update profile', error: error.message });
+        res.status(500).json({ 
+            message: 'Failed to update profile', 
+            error: error.message,
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 });
 

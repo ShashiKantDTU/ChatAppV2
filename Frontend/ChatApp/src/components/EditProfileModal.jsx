@@ -83,43 +83,71 @@ const EditProfileModal = ({ user, onClose, onSave }) => {
   // Function to complete cropping
   const handleCompleteCrop = () => {
     if (!completedCrop || !cropCanvasRef.current || !imgRef.current) {
+      console.error('Missing crop data or references');
       return;
     }
 
     const canvas = cropCanvasRef.current;
     const ctx = canvas.getContext('2d');
+    const image = imgRef.current;
     
-    // Set canvas dimensions to match crop
-    canvas.width = completedCrop.width;
-    canvas.height = completedCrop.height;
+    // Calculate pixel values from percentage crop data
+    const scaleX = image.naturalWidth / image.width;
+    const scaleY = image.naturalHeight / image.height;
+    
+    const pixelCrop = {
+      x: completedCrop.x * scaleX,
+      y: completedCrop.y * scaleY,
+      width: completedCrop.width * scaleX,
+      height: completedCrop.height * scaleY,
+    };
+    
+    // Set canvas dimensions to match crop dimensions
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+    
+    console.log('Creating crop with dimensions:', pixelCrop.width, 'x', pixelCrop.height);
+    console.log('Original image dimensions:', image.naturalWidth, 'x', image.naturalHeight);
+    
+    // Clear canvas before drawing
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Draw the cropped image onto the canvas
     ctx.drawImage(
-      imgRef.current,
-      completedCrop.x,
-      completedCrop.y,
-      completedCrop.width,
-      completedCrop.height,
+      image,
+      pixelCrop.x,
+      pixelCrop.y,
+      pixelCrop.width,
+      pixelCrop.height,
       0,
       0,
-      completedCrop.width,
-      completedCrop.height
+      pixelCrop.width,
+      pixelCrop.height
     );
     
     // Convert canvas to blob and create FormData for uploading
     canvas.toBlob((blob) => {
       if (!blob) {
-        console.error('Canvas is empty');
+        console.error('Canvas is empty or failed to create blob');
         return;
       }
       
-      // Create a new file from the blob
-      const croppedImageFile = new File([blob], "cropped-profile.jpg", { type: 'image/jpeg' });
+      console.log('Created blob with size:', blob.size, 'bytes', 'and type:', blob.type);
+      
+      // Create a new file from the blob with timestamp to avoid caching issues
+      const filename = `profile-${Date.now()}.jpg`;
+      const croppedImageFile = new File([blob], filename, { type: 'image/jpeg' });
       setSelectedImage(croppedImageFile);
       
       // Update preview with cropped image
       const croppedImageUrl = URL.createObjectURL(blob);
       setPreviewUrl(croppedImageUrl);
+      
+      // Clean up the old preview URL to prevent memory leaks
+      setTimeout(() => {
+        URL.revokeObjectURL(croppedImageUrl);
+      }, 60000); // Revoke after 1 minute
+      
       setIsCropping(false);
       
     }, 'image/jpeg', 0.95);
