@@ -39,21 +39,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: function(origin, callback) {
-            // Allow connections with no origin (like from mobile apps)
-            if (!origin) return callback(null, true);
-            
-            if (allowedOrigins.indexOf(origin) !== -1) {
-                callback(null, true);
-            } else {
-                logger.warn(`Socket.IO connection attempt from unauthorized origin: ${origin}`);
-                // Still allow the connection to avoid errors
-                callback(null, true);
-            }
-        },
+        origin: [
+            'https://chatpe.vercel.app',
+            process.env.CLIENT_URL || 'http://localhost:5173',
+            'http://localhost:3000'
+        ],
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
-        credentials: true,
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+        credentials: true
     }
 });
 
@@ -88,27 +80,12 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Enable CORS for all allowed origins
-const allowedOrigins = [
-    'https://chatpe.vercel.app',
-    process.env.CLIENT_URL || 'http://localhost:5173',
-    'http://localhost:3000'
-];
-
-// Configure CORS middleware with proper settings
 app.use(cors({
-    origin: function(origin, callback) {
-        // Allow requests with no origin (like mobile apps, curl requests)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            // Log unauthorized origins for debugging
-            logger.warn(`Request from unauthorized origin: ${origin}`);
-            // Still allow the request to avoid CORS errors
-            callback(null, true);
-        }
-    },
+    origin: [
+        'https://chatpe.vercel.app',
+        process.env.CLIENT_URL || 'http://localhost:5173',
+        'http://localhost:3000'
+    ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
     optionsSuccessStatus: 200,
@@ -120,23 +97,20 @@ app.options('*', cors());
 
 // Additional CORS headers middleware
 app.use((req, res, next) => {
-    const origin = req.headers.origin;
+    const allowedOrigins = [
+        'https://chatpe.vercel.app',
+        process.env.CLIENT_URL || 'http://localhost:5173',
+        'http://localhost:3000'
+    ];
     
-    // Set Access-Control-Allow-Origin header
-    if (origin && allowedOrigins.includes(origin)) {
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
         res.header('Access-Control-Allow-Origin', origin);
-    } else if (!origin) {
-        // For requests without origin header, like from mobile apps
-        res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
     }
     
-    // Set other necessary CORS headers
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    
-    // Add Vary header to inform caches
-    res.header('Vary', 'Origin');
     
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
@@ -265,13 +239,6 @@ const upload = multer({
 // File upload endpoint - Define BEFORE the router middleware
 // to prevent body-parser from trying to parse multipart/form-data
 app.post('/upload', (req, res, next) => {
-    // Ensure CORS headers are set for the response
-    const origin = req.headers.origin;
-    if (origin && allowedOrigins.includes(origin)) {
-        res.header('Access-Control-Allow-Origin', origin);
-        res.header('Access-Control-Allow-Credentials', 'true');
-    }
-    
     // Check Content-Type before proceeding with multer
     const contentType = req.headers['content-type'] || '';
     console.log('Upload request Content-Type:', contentType);
@@ -874,7 +841,8 @@ io.on('connection', (socket) => {
                 online: user.socketid ? true : false,
                 lastSeen: user.onlinestatus.lastseen
             },
-            chats: processedChats
+            chats: processedChats,
+            settings: user.settings
         }
 
         io.to(socket.id).emit('send user', userdata
@@ -892,6 +860,57 @@ io.on('connection', (socket) => {
     socket.on('typing-stop', (data) => {
         // Broadcast to all other users in the same room/channel
         socket.broadcast.emit('typing-stop', data);
+    });
+
+    // Handle user settings updates
+    socket.on('update-user-settings', async (data) => {
+        try {
+            const { userId, settings } = data;
+            
+            if (!userId || !settings) {
+                console.error('Invalid settings update data:', data);
+                socket.emit('settings-update-result', { 
+                    success: false, 
+                    error: 'Invalid settings data' 
+                });
+                return;
+            }
+            
+            console.log('Updating settings for user:', userId, settings);
+            
+            // Find and update the user
+            const user = await User.findOne({ uid: userId });
+            if (!user) {
+                console.error('User not found for settings update:', userId);
+                socket.emit('settings-update-result', { 
+                    success: false, 
+                    error: 'User not found' 
+                });
+                return;
+            }
+            
+            // Update settings
+            user.settings = {
+                ...user.settings, // Keep existing settings
+                ...settings       // Override with new settings
+            };
+            
+            await user.save();
+            
+            // Send success response
+            socket.emit('settings-update-result', { 
+                success: true,
+                settings: user.settings
+            });
+            
+            console.log('Settings updated successfully for user:', userId);
+        } catch (error) {
+            console.error('Error updating user settings:', error);
+            socket.emit('settings-update-result', { 
+                success: false, 
+                error: 'Server error updating settings' 
+            });
+        }
     });
 
     // Handle requests for user online status

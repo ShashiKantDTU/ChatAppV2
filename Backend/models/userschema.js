@@ -79,7 +79,16 @@ const userSchema = new mongoose.Schema({
                 
             },
         },
-    ]
+    ],
+    settings: {
+        type: Object,
+        default: {
+            notifications: true,
+            sound: true,
+            theme: 'dark',
+            darkMode: true
+        }
+    }
 
 })
 

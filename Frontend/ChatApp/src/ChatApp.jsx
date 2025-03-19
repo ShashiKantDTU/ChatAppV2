@@ -8,6 +8,7 @@ import { AuthContext } from './components/authcontext/authcontext';
 import RecentChats from './components/recentchats';
 import { useNavigate } from 'react-router-dom';
 import VideoCall from './components/VideoCall/VideoCall';
+import EditProfileModal from './components/EditProfileModal';
 
 function ChatApp() {
     const { user, setUser } = useContext(AuthContext);
@@ -20,6 +21,10 @@ function ChatApp() {
     const [ismobile, setIsMobile] = useState(false);
     const [activeSection, setActiveSection] = useState('recentChatsSection');
     const [isDarkMode, setIsDarkMode] = useState(() => {
+        // First check user settings if available, then fall back to localStorage
+        if (user?.settings?.darkMode !== undefined) {
+            return user.settings.darkMode;
+        }
         const savedTheme = localStorage.getItem('theme');
         return savedTheme ? savedTheme === 'dark' : true;
     });
@@ -32,10 +37,19 @@ function ChatApp() {
     const [isIncomingCall, setIsIncomingCall] = useState(false);
     const [callInfo, setCallInfo] = useState(null);
     const [callType, setCallType] = useState('video');
+    // Add notification state
+    const [notifications, setNotifications] = useState([]);
+    const [notificationVisible, setNotificationVisible] = useState(false);
+    const notificationTimeoutRef = useRef(null);
+    // Add notification sound ref
+    const notificationSoundRef = useRef(null);
     const navigate = useNavigate();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     // Add state to track call UI mode
     const [callUiMode, setCallUiMode] = useState('expanded'); // 'expanded', 'compact', or 'collapsed'
+    // Add state for edit profile modal
+    const [showEditProfile, setShowEditProfile] = useState(false);
+    const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
     // Function to handle window resize
     const handleResize = useCallback(() => {
@@ -190,7 +204,6 @@ function ChatApp() {
           setIsDataLoading(true);
         }
         
-        await new Promise(resolve => setTimeout(resolve, 3000)); // Delay of 3 seconds
         const updatedUser = await fetchUser(user.uid);
         
         // Preserve the unread status of chats when updating user data
@@ -318,12 +331,53 @@ function ChatApp() {
           setInitialLoadComplete(true);
         },
 
+        "settings-update-result": (result) => {
+          if (result.success) {
+            console.log('Settings updated successfully:', result.settings);
+            // Update settings in user object if needed
+            setUser(prev => ({
+              ...prev,
+              settings: result.settings
+            }));
+            
+            // Refresh user data to ensure settings are fully synced
+            refreshUser();
+          } else {
+            console.error('Failed to update settings:', result.error);
+          }
+        },
+
         "private sync message": () => {
             setNotificationCount((prev) => prev + 1);
         },
         
         "private message": (message) => {
           setNotificationCount((prev) => prev + 1);
+          
+          // Get the latest settings from user state instead of using closure value
+          const showNotif = () => {
+            // Check current state for notifications setting
+            const currentSettings = user?.settings;
+            if (currentSettings?.notifications && message.senderid !== talkingToUser?.uid) {
+              // Find sender info from user's chats
+              const chatId = generateChatId(message.senderid, user.uid);
+              const senderChat = user.chats?.find(chat => chat.chatid === chatId);
+              
+              if (senderChat) {
+                showNotification(message, senderChat.recievername, senderChat.chatimage);
+              } else {
+                // If chat not found in existing chats, use a default or placeholder
+                // This might happen for the first message from a new contact
+                showNotification(message, "New message", null);
+                
+                // Try to refresh user data to get updated chat list
+                refreshUser();
+              }
+            }
+          };
+          
+          // Execute the function to check current settings
+          showNotif();
           
           // Check if the user is currently viewing this chat
           const isCurrentChat = talkingToUser && message.senderid === talkingToUser.uid;
@@ -507,7 +561,7 @@ function ChatApp() {
           });
         }
       };
-    }, [socket, user?.email, user?.uid, talkingToUser, refreshUser, updateMessageInChat, generateChatId]);
+    }, [socket, user?.email, user?.uid, user?.settings, talkingToUser, refreshUser, updateMessageInChat, generateChatId]);
     
     // Handle reaction add
     const handleReactionAdd = useCallback((messageId, reactionType, userId) => {
@@ -821,14 +875,92 @@ function ChatApp() {
       }
     }, [activeSection]);
 
-    // Function to toggle theme
+    // Toggle theme function - update to save to server
     const toggleTheme = useCallback(() => {
-        setIsDarkMode(prev => {
-            const newTheme = !prev;
-            localStorage.setItem('theme', newTheme ? 'dark' : 'light');
-            return newTheme;
+        if (!socket || !user?.uid) return;
+
+        // Toggle the dark mode status
+        const newDarkModeStatus = !isDarkMode;
+        
+        // Update localStorage for immediate effect and as fallback
+        localStorage.setItem('theme', newDarkModeStatus ? 'dark' : 'light');
+        
+        // Update state optimistically
+        setIsDarkMode(newDarkModeStatus);
+        
+        // Create updated settings object
+        const updatedSettings = {
+            ...user.settings,
+            darkMode: newDarkModeStatus
+        };
+        
+        // Update user state with new settings
+        setUser(prev => ({
+            ...prev,
+            settings: updatedSettings
+        }));
+        
+        // Send update to server
+        socket.emit('update-user-settings', {
+            userId: user.uid,
+            settings: { darkMode: newDarkModeStatus }
         });
-    }, []);
+    }, [socket, user, isDarkMode]);
+    
+    // Update the useEffect for theme initialization to watch for user settings changes
+    useEffect(() => {
+        // Update theme when user settings change
+        if (user?.settings?.darkMode !== undefined) {
+            setIsDarkMode(user.settings.darkMode);
+            localStorage.setItem('theme', user.settings.darkMode ? 'dark' : 'light');
+        }
+    }, [user?.settings?.darkMode]);
+    
+    // Toggle notifications function
+    const toggleNotifications = useCallback(() => {
+        if (!socket || !user?.uid) return;
+        
+        // Create updated settings object
+        const updatedSettings = {
+            ...user.settings,
+            notifications: !user.settings?.notifications
+        };
+        
+        // Update user state optimistically
+        setUser(prev => ({
+            ...prev,
+            settings: updatedSettings
+        }));
+        
+        // Send update to server
+        socket.emit('update-user-settings', {
+            userId: user.uid,
+            settings: { notifications: updatedSettings.notifications }
+        });
+    }, [socket, user]);
+    
+    // Toggle sound function
+    const toggleSound = useCallback(() => {
+        if (!socket || !user?.uid) return;
+        
+        // Create updated settings object
+        const updatedSettings = {
+            ...user.settings,
+            sound: !user.settings?.sound
+        };
+        
+        // Update user state optimistically
+        setUser(prev => ({
+            ...prev,
+            settings: updatedSettings
+        }));
+        
+        // Send update to server
+        socket.emit('update-user-settings', {
+            userId: user.uid,
+            settings: { sound: updatedSettings.sound }
+        });
+    }, [socket, user]);
 
     const handleLogout = async () => {
         try {
@@ -998,6 +1130,153 @@ function ChatApp() {
       };
     }, []);
 
+    // Add notification handler function
+    const showNotification = useCallback((message, senderName, senderPic) => {
+      const newNotification = {
+        id: Date.now(),
+        message: message.messagetext || `[${message.messageType || 'file'}]`,
+        senderName,
+        senderPic,
+        senderId: message.senderid,
+        timestamp: new Date()
+      };
+      
+      // Play notification sound if enabled in user settings
+      if (user?.settings?.sound) {
+        // Use the programmatic sound generator
+        const playSound = window.playNotificationSound;
+        if (typeof playSound === 'function') {
+          playSound();
+        }
+      }
+      
+      // Clear any existing timeouts
+      if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current);
+        notificationTimeoutRef.current = null;
+      }
+      
+      // Force immediate transition regardless of current state
+      setNotificationVisible(false);
+      
+      // Update notifications queue immediately - add the new one and keep only last 5
+      setNotifications(prev => {
+        const updatedQueue = [...prev, newNotification].slice(-5);
+        return updatedQueue;
+      });
+      
+      // After a very short delay to allow hide animation to start, show the new notification
+      setTimeout(() => {
+        // Show the newest notification (should be at the end of our queue)
+        setNotifications(prev => {
+          // Move the newest notification to the front of the queue for display
+          if (prev.length > 1) {
+            const newest = prev[prev.length - 1];
+            const remaining = prev.slice(0, prev.length - 1);
+            return [newest, ...remaining];
+          }
+          return prev;
+        });
+        
+        // Now show the notification
+        setNotificationVisible(true);
+        
+        // Set timeout to hide this notification after 5 seconds
+        notificationTimeoutRef.current = setTimeout(() => {
+          setNotificationVisible(false);
+          
+          // Remove from queue after animation completes
+          setTimeout(() => {
+            setNotifications(prev => {
+              if (prev.length <= 1) return [];
+              
+              // Remove the current notification and prepare the next one
+              const remaining = prev.slice(1);
+              
+              // If there are more notifications, show the next one
+              if (remaining.length > 0) {
+                // Small delay before showing next notification
+                setTimeout(() => {
+                  setNotificationVisible(true);
+                  
+                  // Set timeout to hide the next notification
+                  notificationTimeoutRef.current = setTimeout(() => {
+                    setNotificationVisible(false);
+                  }, 5000);
+                }, 50);
+              }
+              
+              return remaining;
+            });
+          }, 200); // shorter transition duration for better responsiveness
+        }, 5000); // Set to 5 seconds for proper notification display time
+      }, 100); // Short delay, just enough for the hide animation to start
+    }, [user?.settings?.sound]);
+
+    // Handle edit profile functionality
+    const handleEditProfile = async (formData) => {
+        setIsUpdatingProfile(true);
+        
+        try {
+            let dataToSend;
+            if (formData instanceof FormData) {
+                dataToSend = formData;
+            } else {
+                dataToSend = new FormData();
+                for (const key in formData) {
+                    dataToSend.append(key, formData[key]);
+                }
+            }
+
+            const hasProfileImage = dataToSend.has('profileImage') && dataToSend.get('profileImage') instanceof File;
+            
+            const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+            const endpoint = hasProfileImage 
+                ? `${API_URL}/update-profile-image` 
+                : `${API_URL}/update-profile`;
+                
+            console.log('Sending profile update to:', endpoint);
+            console.log('Has profile image:', hasProfileImage);
+            if (hasProfileImage) {
+                const file = dataToSend.get('profileImage');
+                console.log('Profile image details:', {
+                    name: file.name,
+                    type: file.type,
+                    size: file.size
+                });
+            }
+                
+            const response = await fetch(endpoint, {
+                method: 'PUT',
+                credentials: 'include',
+                body: dataToSend
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('Profile update failed:', errorData);
+                throw new Error(errorData.message || 'Failed to update profile');
+            }
+
+            const data = await response.json();
+            console.log('Profile update successful:', data);
+
+            setUser(prev => ({
+                ...prev,
+                ...data.user
+            }));
+
+            // Refresh user data after profile update
+            refreshUser();
+
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            throw error;
+        } finally {
+            setIsUpdatingProfile(false);
+        }
+    };
+
     return (
       <div className={`${styles.container} ${isDarkMode ? styles.darkTheme : styles.lightTheme}`}>
         {/* Desktop Navigation Panel - Hidden on Mobile */}
@@ -1091,7 +1370,10 @@ function ChatApp() {
               <h2 className={styles.settingsTitle}>Settings</h2>
               
               <div className={styles.settingsGroup}>
-                <button className={styles.settingsItem}>
+                <button 
+                  className={styles.settingsItem}
+                  onClick={() => setShowEditProfile(true)}
+                >
                   <div className={styles.settingsLabel}>
                     <User size={20} className={styles.settingsIcon} />
                     <span>Profile Settings</span>
@@ -1099,12 +1381,17 @@ function ChatApp() {
                   <span className={styles.settingsValue}>Edit</span>
                 </button>
                 
-                <button className={styles.settingsItem}>
+                <button 
+                  className={styles.settingsItem}
+                  onClick={toggleNotifications}
+                >
                   <div className={styles.settingsLabel}>
                     <Bell size={20} className={styles.settingsIcon} />
                     <span>Notifications</span>
                   </div>
-                  <span className={styles.settingsValue}>On</span>
+                  <span className={styles.settingsValue}>
+                    {user?.settings?.notifications ? 'On' : 'Off'}
+                  </span>
                 </button>
                 
                 <button 
@@ -1121,6 +1408,19 @@ function ChatApp() {
                   </div>
                   <span className={styles.settingsValue}>
                     {isDarkMode ? 'On' : 'Off'}
+                  </span>
+                </button>
+                
+                <button 
+                  className={styles.settingsItem}
+                  onClick={toggleSound}
+                >
+                  <div className={styles.settingsLabel}>
+                    <span className={styles.settingsIcon}>🔊</span>
+                    <span>Notification Sound</span>
+                  </div>
+                  <span className={styles.settingsValue}>
+                    {user?.settings?.sound ? 'On' : 'Off'}
                   </span>
                 </button>
               </div>
@@ -1272,6 +1572,87 @@ function ChatApp() {
             </div>
           </div>
         )}
+        
+        {/* Notification Component */}
+        {notifications.length > 0 && (
+          <div className={`${styles.notificationContainer} ${isDarkMode ? styles.darkTheme : ''}`}>
+            <div 
+              className={`${styles.notification} ${!notificationVisible ? styles.hide : ''}`}
+              onClick={() => {
+                // Handle notification click - navigate to the chat if needed
+                if (!notifications[0]) return;
+                
+                const senderId = notifications[0].senderId;
+                const chatId = generateChatId(user.uid, senderId);
+                
+                if (ismobile) {
+                  setActiveSection('chatSection');
+                }
+                
+                // Find the chat and open it
+                const chat = user.chats?.find(c => c.chatid === chatId);
+                if (chat) {
+                  handleUserChatClick(chat.userid, chat.chatid, user);
+                }
+                
+                // Clear any existing timeouts
+                if (notificationTimeoutRef.current) {
+                  clearTimeout(notificationTimeoutRef.current);
+                  notificationTimeoutRef.current = null;
+                }
+                
+                // Hide notification immediately
+                setNotificationVisible(false);
+                
+                // Clear current notification and prepare the next one after animation completes
+                setTimeout(() => {
+                  setNotifications(prev => {
+                    if (prev.length <= 1) return [];
+                    
+                    const remaining = prev.slice(1);
+                    
+                    // If there are more notifications, prepare to show the next one
+                    if (remaining.length > 0) {
+                      setTimeout(() => {
+                        setNotificationVisible(true);
+                        
+                        // Set timeout to auto-hide after 5 seconds
+                        notificationTimeoutRef.current = setTimeout(() => {
+                          setNotificationVisible(false);
+                        }, 5000);
+                      }, 50); // Short delay
+                    }
+                    
+                    return remaining;
+                  });
+                }, 200); // Shorter transition for better UX
+              }}
+            >
+              <img 
+                src={notifications[0]?.senderPic || "/default-avatar.png"} 
+                alt={notifications[0]?.senderName || "User"} 
+                className={styles.notificationAvatar} 
+              />
+              <div className={styles.notificationContent}>
+                <div className={styles.notificationSender}>
+                  {notifications[0]?.senderName || "New message"}
+                </div>
+                <div className={styles.notificationMessage}>
+                  {notifications[0]?.message || "You have a new message"}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {showEditProfile && (
+          <EditProfileModal
+            user={user}
+            onClose={() => setShowEditProfile(false)}
+            onSave={handleEditProfile}
+          />
+        )}
+        
       </div>
     );
 }
