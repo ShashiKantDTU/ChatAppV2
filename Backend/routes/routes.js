@@ -278,6 +278,15 @@ const profileUpload = multer({
 
 // Update profile with image upload
 router.put('/update-profile-image', verifyJWT, (req, res, next) => {
+    // Check if authentication passed - the verifyJWT middleware should have added req.user
+    if (!req.user) {
+        console.error('User not authenticated in update-profile-image route');
+        return res.status(401).json({ message: 'Not Loggedin' });
+    }
+    
+    // Log the authenticated user attempting to update their profile
+    console.log(`Authenticated user ${req.user.email} (${req.user.uid}) is updating their profile image`);
+
     // Check Content-Type for multipart/form-data
     const contentType = req.headers['content-type'] || '';
     console.log('Received content type:', contentType);
@@ -293,10 +302,17 @@ router.put('/update-profile-image', verifyJWT, (req, res, next) => {
     next();
 }, profileUpload.single('profileImage'), async (req, res) => {
     try {
+        // Double-check authentication is still valid after multer middleware
+        if (!req.user) {
+            console.error('User auth lost during file upload processing');
+            return res.status(401).json({ message: 'Authentication lost during upload processing' });
+        }
+        
         const userId = req.user.uid;
         const { username } = req.body;
 
-        console.log('Updating profile with image. File:', req.file);
+        console.log('Updating profile with image for user:', userId);
+        console.log('File received:', req.file ? 'Yes' : 'No');
         console.log('Form data:', req.body);
 
         // Find the user

@@ -7,7 +7,7 @@ const originalFetch = window.fetch;
 window.fetch = function(...args) {
   let [resource, config] = args;
   
-  // Only apply defaults if this is our API call and no config was provided
+  // Only apply defaults if this is our API call
   if (typeof resource === 'string' && 
       (resource.includes('localhost:3000') || 
        resource.includes('chatappv2-qa96.onrender.com'))) {
@@ -33,6 +33,13 @@ window.fetch = function(...args) {
     }
     
     headers['Accept'] = 'application/json';
+    
+    // Add Authorization header if token exists in localStorage
+    const token = localStorage.getItem('auth_token');
+    if (token && !headers['Authorization']) {
+      headers['Authorization'] = `Bearer ${token}`;
+      console.log('Automatically added auth token to request headers');
+    }
     
     config = {
       ...config,

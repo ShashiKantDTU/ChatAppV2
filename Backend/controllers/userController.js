@@ -21,6 +21,7 @@ const verifyJWT = async (req, res, next) => {
     // Log request headers to debug cookie transmission
     console.log('=== AUTH DEBUG ===');
     console.log('Request URL:', req.originalUrl);
+    console.log('Content-Type:', req.headers['content-type']);
     console.log('Cookie header:', req.headers.cookie);
     console.log('Origin header:', req.headers.origin);
     console.log('Authorization header:', req.headers.authorization);
@@ -38,9 +39,9 @@ const verifyJWT = async (req, res, next) => {
     }
     
     console.log('Token from cookies/Authorization:', token ? 'Token exists' : 'Token missing');
-    console.log('Cookies received:', req.cookies);
     
     if (!token) {
+        console.log('No token found in request - returning 401');
         return res.status(401).json({ message: 'Not Loggedin' });
     }
     
@@ -54,12 +55,17 @@ const verifyJWT = async (req, res, next) => {
             console.log('User not found for email:', decoded.email);
             return res.status(404).json({ message: 'User not found' });
         }
+        
         // Attach user details to request
         req.user = user;
+        
+        // Add authentication success header for debugging
+        res.setHeader('X-Auth-Status', 'success');
+        
         next();
     } catch (error) {
         console.log('JWT verification error:', error.message);
-        return res.status(403).json({ message: "Invalid or Expired Token" });
+        return res.status(403).json({ message: "Invalid or Expired Token", error: error.message });
     }
 }
 

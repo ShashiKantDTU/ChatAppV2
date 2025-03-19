@@ -129,10 +129,21 @@ const RecentChats = (props) => {
           size: file.size
         });
       }
+      
+      // Get auth token from localStorage - use auth_token to match AuthContext
+      const token = localStorage.getItem('auth_token');
+      
+      // Create request headers including Authorization if token exists
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log('Added Authorization header with token from localStorage');
+      }
         
       const response = await fetch(endpoint, {
         method: 'PUT',
         credentials: 'include',
+        headers: headers,
         body: dataToSend
       });
 
