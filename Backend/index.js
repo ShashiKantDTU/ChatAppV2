@@ -39,7 +39,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.CLIENT_URL || 'http://localhost:5173',
+        origin: [
+            'https://chatpe.vercel.app',
+            process.env.CLIENT_URL || 'http://localhost:5173',
+            'http://localhost:3000'
+        ],
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
         credentials: true
     }
@@ -75,19 +79,35 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 
-// Enable CORS for specific choices
+// Enable CORS for all allowed origins
 app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: [
+        'https://chatpe.vercel.app',
+        process.env.CLIENT_URL || 'http://localhost:5173',
+        'http://localhost:3000'
+    ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
     optionsSuccessStatus: 200,
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// Additional CORS headers for preflight requests
+// Handle preflight requests globally
+app.options('*', cors());
+
+// Additional CORS headers middleware
 app.use((req, res, next) => {
-    // Important: This must match the origin for cookie purposes
-    res.header('Access-Control-Allow-Origin', process.env.CLIENT_URL || 'http://localhost:5173');
+    const allowedOrigins = [
+        'https://chatpe.vercel.app',
+        process.env.CLIENT_URL || 'http://localhost:5173',
+        'http://localhost:3000'
+    ];
+    
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+    }
+    
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');

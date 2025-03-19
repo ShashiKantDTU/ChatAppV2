@@ -280,6 +280,10 @@ const DarkLoginForm = () => {
                         />
                     </div>
 
+                    <div className="email-verification-note">
+                        <p>No email verification required to start using ChatApp. Your email will only be needed if you ever need to reset your password.</p>
+                    </div>
+
                     <div className="auth-footer">
                         Don't have an account? <a href="/signup">Create account</a>
                     </div>

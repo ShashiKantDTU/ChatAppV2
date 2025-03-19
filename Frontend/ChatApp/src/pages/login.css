@@ -975,6 +975,35 @@ input:-webkit-autofill:active {
   animation: shimmer 2s infinite;
 }
 
+/* Email verification note */
+.email-verification-note {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background-color: rgba(99, 102, 241, 0.08);
+  border-left: 3px solid var(--primary-color);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.email-verification-note::before {
+  content: 'ℹ️';
+  position: absolute;
+  top: 0.65rem;
+  left: 0.75rem;
+  opacity: 0.8;
+  font-size: 1rem;
+}
+
+.email-verification-note p {
+  padding-left: 1.5rem;
+  margin: 0;
+}
+
 /* Responsive styles */
 @media (max-width: 1200px) {
   .auth-page-left {
