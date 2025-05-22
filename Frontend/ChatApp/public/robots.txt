@@ -1,0 +1,6 @@
+# Allow all web crawlers to access all content
+User-agent: *
+Allow: /
+
+# If you create a sitemap in the future, uncomment and update the line below
+# Sitemap: https://chatpe.vercel.app/sitemap.xml 

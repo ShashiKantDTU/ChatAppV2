@@ -40,6 +40,7 @@
     "socket.io": "^4.8.1",
     "socketio": "^1.0.0",
     "twilio": "^5.5.0",
+    "web-push": "^3.6.7",
     "winston": "^3.17.0"
   },
   "engines": {

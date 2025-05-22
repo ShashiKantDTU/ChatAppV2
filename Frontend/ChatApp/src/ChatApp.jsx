@@ -50,121 +50,12 @@ function ChatApp() {
     // Add state for edit profile modal
     const [showEditProfile, setShowEditProfile] = useState(false);
     const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+    // Add transition state for mobile chat loading
+    const [isChatLoading, setIsChatLoading] = useState(false);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine);
+    const [showOfflineBanner, setShowOfflineBanner] = useState(false);
+    const offlineBannerTimeoutRef = useRef(null);
 
-    // Function to handle window resize
-    const handleResize = useCallback(() => {
-      const isMobileView = window.innerWidth < 640;
-      setIsMobile(isMobileView);
-      
-      if (!isMobileView && activeSection === 'chatSection') {
-        setActiveSection('recentChatsSection');
-      }
-    }, [activeSection]);
-
-    useEffect(() => {
-      handleResize();
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }, [handleResize]);
-
-    // Establish socket connection
-    useEffect(() => {
-        // Only create socket if it doesn't exist
-        if (!socket) {
-            console.log('Creating new socket connection');
-            const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-            const newSocket = io(API_URL, {
-                reconnection: true,
-                reconnectionAttempts: 10,
-                reconnectionDelay: 1000,
-                reconnectionDelayMax: 5000,
-                timeout: 20000,
-                autoConnect: true,
-                transports: ['websocket', 'polling'],
-                upgrade: true,
-                forceNew: true,
-                secure: API_URL.startsWith('https')
-            });
-            setSocket(newSocket);
-            
-            // Add connection event handlers
-            newSocket.on('connect', () => {
-                console.log('Connected to server');
-                // Re-register socket if user is logged in
-                if (user?.email) {
-                    newSocket.emit('registersocket', user.email);
-                }
-            });
-
-            newSocket.on('disconnect', (reason) => {
-                console.log('Disconnected from server:', reason);
-                if (reason === 'io server disconnect') {
-                    // Server initiated disconnect, try to reconnect
-                    newSocket.connect();
-                }
-            });
-
-            newSocket.on('connect_error', (error) => {
-                console.error('Connection error:', error);
-            });
-
-            newSocket.on('reconnect', (attemptNumber) => {
-                console.log('Reconnected to server after', attemptNumber, 'attempts');
-                // Re-register socket if user is logged in
-                if (user?.email) {
-                    newSocket.emit('registersocket', user.email);
-                }
-            });
-
-            newSocket.on('reconnect_error', (error) => {
-                console.error('Reconnection error:', error);
-            });
-
-            newSocket.on('reconnect_failed', () => {
-                console.error('Failed to reconnect to server');
-                alert('Connection lost. Please refresh the page to reconnect.');
-            });
-
-            // Add chat deletion listeners
-            newSocket.on('chat-deleted', (data) => {
-                if (data.success) {
-                    setUser(prev => ({
-                        ...prev,
-                        chats: prev.chats.filter(chat => chat.chatid !== data.chatId)
-                    }));
-                    
-                    if (talkingToUser?.chatid === data.chatId) {
-                        setTalkingToUser(null);
-                    }
-                }
-            });
-
-            newSocket.on('chat-deleted-by-other', (data) => {
-                if (talkingToUser?.chatid === data.chatId) {
-                    setTalkingToUser(null);
-                    alert(`${data.deletedBy} has deleted this chat`);
-                }
-            });
-        }
-        
-        // Cleanup function
-        return () => {
-            if (socket) {
-                console.log('Cleaning up socket connection');
-                socket.off('connect');
-                socket.off('disconnect');
-                socket.off('connect_error');
-                socket.off('reconnect');
-                socket.off('reconnect_error');
-                socket.off('reconnect_failed');
-                socket.off('chat-deleted');
-                socket.off('chat-deleted-by-other');
-                socket.disconnect();
-                setSocket(null);
-            }
-        };
-    }, [user?.email]); // Only depend on user email
-    
     // Function to fetch user data from server
     const fetchUser = useCallback((uid) => {
       return new Promise((resolve, reject) => {
@@ -238,27 +129,201 @@ function ChatApp() {
         setIsDataLoading(false);
       }
     }, [fetchUser, user?.uid, setUser, socket, initialLoadComplete]);
-    
-    // Add initial data loading useEffect
-    useEffect(() => {
-      if (user?.uid && socket) {
-        // Set initial loading state
-        setIsDataLoading(true);
-        
-        // Initial fetch of user data
-        fetchUser(user.uid)
-          .then(userData => {
-            setUser(prev => ({ ...prev, ...userData }));
-            setInitialLoadComplete(true);
-          })
-          .catch(error => {
-            console.error('Error fetching initial user data:', error);
-          })
-          .finally(() => {
-            setIsDataLoading(false);
-          });
+
+    // Function to handle window resize
+    const handleResize = useCallback(() => {
+      const isMobileView = window.innerWidth < 640;
+      setIsMobile(isMobileView);
+      
+      if (!isMobileView && activeSection === 'chatSection') {
+        setActiveSection('recentChatsSection');
       }
-    }, [user?.uid, socket, fetchUser, setUser]);
+    }, [activeSection]);
+
+    useEffect(() => {
+      handleResize();
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }, [handleResize]);
+
+    // Add offline handling
+    useEffect(() => {
+        const handleOnline = async () => {
+            console.log('Online event triggered');
+            setIsOffline(false);
+            setShowOfflineBanner(true);
+            
+            // Clear any existing timeout
+            if (offlineBannerTimeoutRef.current) {
+                clearTimeout(offlineBannerTimeoutRef.current);
+            }
+            
+            // Set up the timeout to hide the banner
+            offlineBannerTimeoutRef.current = setTimeout(() => {
+                console.log('Banner timeout triggered, hiding banner');
+                setShowOfflineBanner(false);
+            }, 3000);
+
+            // Refresh user data and reconnect socket when coming back online
+            if (user?.uid) {
+                try {
+                    await refreshUser();
+                    if (talkingToUser?.uid) {
+                        const updatedUser = await fetchUser(talkingToUser.uid);
+                        if (updatedUser) {
+                            setTalkingToUser(updatedUser);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error refreshing data after coming online:', error);
+                }
+            }
+        };
+
+        const handleOffline = () => {
+            console.log('Offline event triggered');
+            setIsOffline(true);
+            setShowOfflineBanner(true);
+            
+            // Clear any existing timeout when going offline
+            if (offlineBannerTimeoutRef.current) {
+                clearTimeout(offlineBannerTimeoutRef.current);
+                offlineBannerTimeoutRef.current = null;
+            }
+        };
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+            if (offlineBannerTimeoutRef.current) {
+                clearTimeout(offlineBannerTimeoutRef.current);
+                offlineBannerTimeoutRef.current = null;
+            }
+        };
+    }, [user?.uid, talkingToUser?.uid, refreshUser, fetchUser]); // Remove isOffline and showOfflineBanner from dependencies
+
+    // Add a separate effect to handle banner visibility
+    useEffect(() => {
+        if (!isOffline && showOfflineBanner) {
+            const timeoutId = setTimeout(() => {
+                console.log('Banner auto-hide triggered');
+                setShowOfflineBanner(false);
+            }, 3000);
+
+            return () => {
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+            };
+        }
+    }, [isOffline, showOfflineBanner]);
+
+    // Modify socket connection to handle offline state
+    useEffect(() => {
+        if (!socket && !isOffline) {
+            console.log('Creating new socket connection');
+            const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+            const newSocket = io(API_URL, {
+                reconnection: true,
+                reconnectionAttempts: 10,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                timeout: 20000,
+                autoConnect: true,
+                transports: ['websocket', 'polling'],
+                upgrade: true,
+                forceNew: true,
+                secure: API_URL.startsWith('https')
+            });
+            setSocket(newSocket);
+            
+            // Add connection event handlers
+            newSocket.on('connect', () => {
+                console.log('Connected to server');
+                if (user?.email) {
+                    newSocket.emit('registersocket', user.email);
+                    // Refresh user data after socket reconnection
+                    refreshUser();
+                }
+            });
+
+            newSocket.on('disconnect', (reason) => {
+                console.log('Disconnected from server:', reason);
+                if (reason === 'io server disconnect') {
+                    newSocket.connect();
+                }
+            });
+
+            newSocket.on('connect_error', (error) => {
+                console.error('Connection error:', error);
+            });
+
+            newSocket.on('reconnect', async (attemptNumber) => {
+                console.log('Reconnected to server after', attemptNumber, 'attempts');
+                if (user?.email) {
+                    newSocket.emit('registersocket', user.email);
+                    // Refresh user data after reconnection
+                    await refreshUser();
+                    // If we have a talkingToUser, refresh their data too
+                    if (talkingToUser?.uid) {
+                        const updatedUser = await fetchUser(talkingToUser.uid);
+                        if (updatedUser) {
+                            setTalkingToUser(updatedUser);
+                        }
+                    }
+                }
+            });
+
+            newSocket.on('reconnect_error', (error) => {
+                console.error('Reconnection error:', error);
+            });
+
+            newSocket.on('reconnect_failed', () => {
+                console.error('Failed to reconnect to server');
+                alert('Connection lost. Please refresh the page to reconnect.');
+            });
+
+            // Add chat deletion listeners
+            newSocket.on('chat-deleted', (data) => {
+                if (data.success) {
+                    setUser(prev => ({
+                        ...prev,
+                        chats: prev.chats.filter(chat => chat.chatid !== data.chatId)
+                    }));
+                    
+                    if (talkingToUser?.chatid === data.chatId) {
+                        setTalkingToUser(null);
+                    }
+                }
+            });
+
+            newSocket.on('chat-deleted-by-other', (data) => {
+                if (talkingToUser?.chatid === data.chatId) {
+                    setTalkingToUser(null);
+                    alert(`${data.deletedBy} has deleted this chat`);
+                }
+            });
+        }
+        
+        return () => {
+            if (socket) {
+                console.log('Cleaning up socket connection');
+                socket.off('connect');
+                socket.off('disconnect');
+                socket.off('connect_error');
+                socket.off('reconnect');
+                socket.off('reconnect_error');
+                socket.off('reconnect_failed');
+                socket.off('chat-deleted');
+                socket.off('chat-deleted-by-other');
+                socket.disconnect();
+                setSocket(null);
+            }
+        };
+    }, [user?.email, isOffline, talkingToUser?.uid, refreshUser, fetchUser]); // Add dependencies
     
     // Generate chat ID from two user IDs
     const generateChatId = useCallback((uid1, uid2) => {
@@ -612,6 +677,11 @@ function ChatApp() {
     const handleUserChatClick = useCallback(async (uid, chatId, loggedUser) => {
       if (!socket) return;
       
+      // For mobile view, set loading state before starting data fetch
+      if (ismobile) {
+        setIsChatLoading(true);
+      }
+      
       // Extract UID from chat ID if needed
       let targetUid = uid;
       if (!targetUid || targetUid === '') {
@@ -670,13 +740,23 @@ function ChatApp() {
           };
         });
         
-        // Close search div if open
+        // Change active section only after data is loaded
         setActiveSection('chatSection');
+        
+        // Reset loading state
+        if (ismobile) {
+          setIsChatLoading(false);
+        }
       } catch (error) {
         // console.error('Error fetching user data:', error);
         alert('Error fetching user data: ' + error);
+        
+        // Reset loading state on error
+        if (ismobile) {
+          setIsChatLoading(false);
+        }
       }
-    }, [socket, fetchUser, fetchChats, generateChatId]);
+    }, [socket, fetchUser, fetchChats, generateChatId, ismobile]);
     
     // Handle user typing
     const handleUserTyping = useCallback((e) => {
@@ -1277,8 +1357,28 @@ function ChatApp() {
         }
     };
 
+    // Add offline banner component
+    const OfflineBanner = () => {
+        if (!showOfflineBanner) return null;
+        
+        return (
+            <div className={styles.offlineBanner}>
+                {isOffline ? (
+                    <div className={styles.offlineMessage}>
+                        No internet connection. Some features may be limited.
+                    </div>
+                ) : (
+                    <div className={styles.onlineMessage}>
+                        Connection restored! You're back online.
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
       <div className={`${styles.container} ${isDarkMode ? styles.darkTheme : styles.lightTheme}`}>
+        <OfflineBanner />
         {/* Desktop Navigation Panel - Hidden on Mobile */}
         <nav className={`${styles.navigationPanel} ${ismobile ? styles.hiddenOnMobile : ''}`}>
           <div className={styles.logoSection}>
@@ -1440,22 +1540,24 @@ function ChatApp() {
           <div 
             className={`${styles.recentChatsSection} ${ismobile ? styles.mobileRecentChats : ''}`}
             style={{
-              width: activeSection === 'recentChatsSection' || (!ismobile && activeSection !== 'searchSection' && activeSection !== 'settingsSection') 
-                ? (ismobile ? '100%' : '400px') 
+              width: activeSection === 'recentChatsSection' || (!ismobile && activeSection !== 'searchSection' && activeSection !== 'settingsSection')
+                ? (ismobile ? '100%' : '400px')
                 : '0',
               height: ismobile ? '100%' : 'auto',
-              opacity: activeSection === 'recentChatsSection' ? '1' : '0',
-              visibility: activeSection === 'recentChatsSection' ? 'visible' : 'hidden',
+              opacity: activeSection === 'recentChatsSection' || (ismobile && isChatLoading) ? '1' : '0',
+              visibility: activeSection === 'recentChatsSection' || (ismobile && isChatLoading) ? 'visible' : 'hidden',
               position: ismobile ? 'absolute' : 'relative',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              transition: ismobile ? 'opacity 0.3s ease, visibility 0.3s ease' : 'none'
             }}
           >
             <RecentChats
               handlechatclick={(uid, chatId) => {
                 handleUserChatClick(uid, chatId, user);
-                if (ismobile) {
-                  setActiveSection('chatSection');
-                }
+                // Remove immediate section change - we'll do it after data loads
+                // if (ismobile) {
+                //   setActiveSection('chatSection');
+                // }
               }}
               handlesearchbtn={() => handleNavigation('searchSection')}
               user={{...user, chats: sortedChats}}
@@ -1476,7 +1578,8 @@ function ChatApp() {
               opacity: (ismobile && activeSection !== 'chatSection') ? '0' : '1',
               visibility: (ismobile && activeSection !== 'chatSection') ? 'hidden' : 'visible',
               position: ismobile ? 'absolute' : 'relative',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              transition: ismobile ? 'opacity 0.3s ease, visibility 0.3s ease' : 'none'
             }}
           >
             {talkingToUser ? (
@@ -1491,6 +1594,63 @@ function ChatApp() {
                 socket={socket}
                 localUser={user}
               />
+            ) : ismobile && isChatLoading ? (
+              <div className={styles.chatLoadingContainer}>
+                <div className={styles.chatSkeleton}>
+                  {/* Skeleton Header */}
+                  <div className={styles.skeletonHeader}>
+                    <div className={styles.skeletonAvatar}></div>
+                    <div className={styles.skeletonInfo}>
+                      <div className={styles.skeletonName}></div>
+                      <div className={styles.skeletonStatus}></div>
+                    </div>
+                    <div className={styles.skeletonHeaderButtons}>
+                      <div className={styles.skeletonHeaderButton}></div>
+                      <div className={styles.skeletonHeaderButton}></div>
+                    </div>
+                  </div>
+                  
+                  {/* Skeleton Messages */}
+                  <div className={styles.skeletonMessages}>
+                    <div className={styles.skeletonMessage}>
+                      <div className={styles.skeletonAvatar}></div>
+                      <div className={styles.skeletonMessageContent}>
+                        <div className={styles.skeletonMessageBubble} style={{ width: '180px' }}></div>
+                        <div className={styles.skeletonTimestamp}></div>
+                      </div>
+                    </div>
+                    
+                    <div className={`${styles.skeletonMessage} ${styles.skeletonRightMessage}`}>
+                      <div className={styles.skeletonMessageContent}>
+                        <div className={styles.skeletonMessageBubble} style={{ width: '120px' }}></div>
+                        <div className={styles.skeletonTimestamp}></div>
+                      </div>
+                    </div>
+                    
+                    <div className={styles.skeletonMessage}>
+                      <div className={styles.skeletonAvatar}></div>
+                      <div className={styles.skeletonMessageContent}>
+                        <div className={styles.skeletonMessageBubble} style={{ width: '220px' }}></div>
+                        <div className={styles.skeletonTimestamp}></div>
+                      </div>
+                    </div>
+                    
+                    <div className={`${styles.skeletonMessage} ${styles.skeletonRightMessage}`}>
+                      <div className={styles.skeletonMessageContent}>
+                        <div className={styles.skeletonMessageBubble} style={{ width: '160px' }}></div>
+                        <div className={styles.skeletonTimestamp}></div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Skeleton Input Area */}
+                  <div className={styles.skeletonInputArea}>
+                    <div className={styles.skeletonInputButton}></div>
+                    <div className={styles.skeletonInput}></div>
+                    <div className={styles.skeletonInputButton}></div>
+                  </div>
+                </div>
+              </div>
             ) : (
               <EmptyPage onNewChat={() => handleNavigation('searchSection')} />
             )}
@@ -1502,24 +1662,28 @@ function ChatApp() {
               <button 
                 className={`${styles.mobileNavButton} ${activeSection === 'recentChatsSection' ? styles.active : ''}`}
                 onClick={() => handleNavigation('recentChatsSection')}
+                aria-label="Home"
               >
                 <Home size={24} />
               </button>
               <button 
                 className={`${styles.mobileNavButton} ${activeSection === 'searchSection' ? styles.active : ''}`}
                 onClick={() => handleNavigation('searchSection')}
+                aria-label="Search"
               >
                 <Search size={24} />
               </button>
               <button 
                 className={`${styles.mobileNavButton} ${activeSection === 'settingsSection' ? styles.active : ''}`}
                 onClick={() => handleNavigation('settingsSection')}
+                aria-label="Settings"
               >
                 <Settings size={24} />
               </button>
               <button 
                 className={`${styles.mobileNavButton} ${styles.logoutMobileButton}`}
                 onClick={() => setShowLogoutConfirm(true)}
+                aria-label="Logout"
               >
                 <LogOut size={24} />
               </button>

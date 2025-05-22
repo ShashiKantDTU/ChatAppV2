@@ -1,14 +1,85 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script type="module">
+import RefreshRuntime from "/@react-refresh"
+RefreshRuntime.injectIntoGlobalHook(window)
+window.$RefreshReg$ = () => {}
+window.$RefreshSig$ = () => (type) => type
+window.__vite_plugin_react_preamble_installed__ = true
+</script>
+
+    <script type="module" src="/@vite/client"></script>
+
     <meta charset="UTF-8" />
     <link rel="icon" type="image/jpeg" href="/chatapp.jpeg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat App</title>
+    <meta name="description" content="ChatApp - A modern, real-time messaging application with video calling, file sharing, and instant notifications. Connect with friends and colleagues securely." />
+    <meta name="theme-color" content="#7a75f3" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/ios/180.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/ios/152.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/ios/167.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/ios/180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Chatpe" />
+    <title>Chatpe</title>
     <script src="/notification-sound.js"></script>
+    <script>
+      // Global variable to track installability
+      window.appIsInstallable = false;
+      window.deferredPrompt = null;
+      
+      // Capture the beforeinstallprompt event early
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.deferredPrompt = e;
+        window.appIsInstallable = true;
+        console.log('App is installable! Captured early in page load.');
+        
+        // Notify any components that might be listening
+        document.dispatchEvent(new CustomEvent('app-installable', { 
+          detail: { installable: true }
+        }));
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Create a success toast when the app is installed
+      window.addEventListener('appinstalled', () => {
+        // Show a success message
+        const toast = document.createElement('div');
+        toast.style.position = 'fixed';
+        toast.style.bottom = '20px';
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.backgroundColor = '#4CAF50';
+        toast.style.color = 'white';
+        toast.style.padding = '12px 20px';
+        toast.style.borderRadius = '4px';
+        toast.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.2)';
+        toast.style.zIndex = 10000;
+        toast.textContent = '✅ Chatpe has been installed successfully!';
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+          if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+          }
+        }, 4000);
+        
+        // Update installability
+        window.appIsInstallable = false;
+        window.deferredPrompt = null;
+        
+        console.log('PWA was installed successfully 🎉');
+      });
+    </script>
   </body>
 </html>

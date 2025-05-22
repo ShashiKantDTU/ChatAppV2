@@ -48,6 +48,19 @@ window.fetch = function(...args) {
 // Log that our fetch override is active
 console.log('Global fetch configured for cross-domain cookies');
 
+// Register service worker
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+            .then(registration => {
+                console.log('Service Worker registered:', registration);
+            })
+            .catch(error => {
+                console.log('Service Worker registration failed:', error);
+            });
+    });
+}
+
 createRoot(document.getElementById('root')).render(
    
         <App />

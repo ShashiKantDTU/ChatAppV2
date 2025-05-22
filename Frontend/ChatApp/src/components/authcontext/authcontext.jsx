@@ -12,7 +12,7 @@ const AuthProvider = ({ children }) => {
     const navigate = useNavigate()
 
     // 🔹 Skip authentication check for login & signup pages
-    const excludedPaths = ['/login', '/signup', '/forgot-password', '/reset-password'];
+    const excludedPaths = ['/login', '/signup', '/forgot-password', '/reset-password','/about'];
 
     useEffect(() => {
         if (excludedPaths.includes(location.pathname)) {
