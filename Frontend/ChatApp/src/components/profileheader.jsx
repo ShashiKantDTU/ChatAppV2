@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import styles from './profileheader.module.css';
-import { FaBell, FaCopy } from 'react-icons/fa';
+import { FaBell, FaEdit, FaCopy } from 'react-icons/fa';
 
 // Skeleton UI for profile header when loading
 const SkeletonProfileHeader = () => {
@@ -30,76 +30,6 @@ const SkeletonProfileHeader = () => {
 
 const ProfileHeader = (props) => {
   const [showTooltip, setShowTooltip] = useState(false);
-  const [isInstallable, setIsInstallable] = useState(window.appIsInstallable || false);
-  
-  useEffect(() => {
-    // Check if the app is already installable when component mounts
-    if (window.appIsInstallable || window.deferredPrompt) {
-      setIsInstallable(true);
-    }
-    
-    // For events that occur after component mount
-    const handleBeforeInstallPrompt = (e) => {
-      console.log('Component caught beforeinstallprompt event');
-      setIsInstallable(true);
-    };
-    
-    // Listen for custom event from early detection
-    const handleAppInstallable = (e) => {
-      console.log('Component received app-installable event');
-      setIsInstallable(true);
-    };
-    
-    // Listen for install completed
-    const handleAppInstalled = () => {
-      setIsInstallable(false);
-    };
-    
-    // Add event listeners
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    document.addEventListener('app-installable', handleAppInstallable);
-    window.addEventListener('appinstalled', handleAppInstalled);
-    
-    // Force a check for installability one second after mount
-    const timer = setTimeout(() => {
-      if (window.appIsInstallable || window.deferredPrompt) {
-        console.log('Timer check: App is installable');
-        setIsInstallable(true);
-      }
-    }, 1000);
-    
-    // Clean up
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      document.removeEventListener('app-installable', handleAppInstallable);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-      clearTimeout(timer);
-    };
-  }, []);
-  
-  // Function to handle install click
-  const handleInstallClick = () => {
-    const promptEvent = window.deferredPrompt;
-    if (!promptEvent) {
-      console.log('No prompt event saved');
-      return;
-    }
-    
-    // Show the install prompt
-    promptEvent.prompt();
-    
-    // Wait for the user response
-    promptEvent.userChoice.then((choiceResult) => {
-      if (choiceResult.outcome === 'accepted') {
-        console.log('User accepted the install prompt');
-      } else {
-        console.log('User dismissed the install prompt');
-      }
-      window.deferredPrompt = null;
-      window.appIsInstallable = false;
-      setIsInstallable(false);
-    });
-  };
   
   // If loading state is true, show skeleton UI
   if (props.isLoading) {
@@ -154,14 +84,10 @@ const ProfileHeader = (props) => {
           <FaBell size={16} color="#a0aec0" />
         </button>
         
-        {isInstallable && (
-          <button className={styles.editButton} onClick={handleInstallClick}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2v12M12 14l-4-4M12 14l4-4M20 7v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7"/>
-            </svg>
-            <span>Install App</span>
-          </button>
-        )}
+        <button className={styles.editButton} onClick={props.onEditProfile}>
+          <FaEdit size={14} />
+          <span>Edit Profile</span>
+        </button>
       </div>
     </header>
   );

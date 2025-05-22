@@ -61,8 +61,8 @@ const Authloading = () => {
           {showReloadMessage && (
             <div className="reload-message fade-in">
               <p>We're using a free hosting tier that sometimes requires a server wake-up.</p>
-              <p>This can take up to 2 minute on first connection.</p>
-              <p>Server Wakeup has initiated server will be Live , You can come back</p>
+              <p>This can take up to a minute on first connection.</p>
+              <p>If it's taking too long, you can try refreshing:</p>
               <button className="reload-button" onClick={handleReload}>
                 Reload Page
               </button>
