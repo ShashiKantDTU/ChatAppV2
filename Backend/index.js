@@ -150,6 +150,11 @@ const storage = new CloudinaryStorage({
     }
 });
 
+
+
+
+
+
 // Add endpoint to fetch ICE server credentials
 app.get('/api/ice-servers', async (req, res) => {
     try {
@@ -356,6 +361,81 @@ app.delete('/delete-file/:publicId', async (req, res) => {
             error: error.message
         });
     }
+});
+
+// Health check endpoint
+app.get('/health', async (req, res) => {
+    try {
+        const healthCheck = {
+            status: 'OK',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            environment: process.env.NODE_ENV || 'development',
+            version: process.env.npm_package_version || '1.0.0',
+            services: {
+                database: 'disconnected',
+                cloudinary: 'unknown'
+            }
+        };
+
+        // Check database connection
+        try {
+            if (mongoose.connection.readyState === 1) {
+                healthCheck.services.database = 'connected';
+            } else if (mongoose.connection.readyState === 2) {
+                healthCheck.services.database = 'connecting';
+            } else if (mongoose.connection.readyState === 3) {
+                healthCheck.services.database = 'disconnecting';
+            } else {
+                healthCheck.services.database = 'disconnected';
+            }
+        } catch (dbError) {
+            healthCheck.services.database = 'error';
+            logger.warn('Database health check failed:', dbError.message);
+        }
+
+        // Check Cloudinary connection by testing configuration
+        try {
+            if (cloudinary.config().cloud_name && cloudinary.config().api_key && cloudinary.config().api_secret) {
+                healthCheck.services.cloudinary = 'configured';
+            } else {
+                healthCheck.services.cloudinary = 'not_configured';
+            }
+        } catch (cloudinaryError) {
+            healthCheck.services.cloudinary = 'error';
+            logger.warn('Cloudinary health check failed:', cloudinaryError.message);
+        }
+
+        // Set response status based on critical services
+        const isHealthy = healthCheck.services.database === 'connected';
+        
+        res.status(isHealthy ? 200 : 503).json(healthCheck);
+        
+    } catch (error) {
+        logger.error('Health check failed:', error);
+        res.status(503).json({
+            status: 'ERROR',
+            timestamp: new Date().toISOString(),
+            error: error.message
+        });
+    }
+});
+
+// Lightweight health check endpoint for load balancers
+app.get('/health/ready', (req, res) => {
+    res.status(200).json({ 
+        status: 'ready',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Liveness probe endpoint
+app.get('/health/live', (req, res) => {
+    res.status(200).json({
+        status: 'alive',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
 });
 
 // Add router middleware AFTER defining the upload endpoints
